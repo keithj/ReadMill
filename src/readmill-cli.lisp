@@ -50,7 +50,9 @@ designating a CLI class."
     (mapc (lambda (cmd)
             (let* ((cli (get-cli cmd))
                    (doc (documentation (class-name (class-of cli)) 'type)))
-              (help-message cli doc stream))) commands)))
+              (if doc
+                  (help-message cli doc stream)
+                  (warn "No help was found for ~a" cmd)))) commands)))
 
 (defun make-pg-record (command-line &optional id)
   "Returns a new ReadMill PG (Program) SAM header record. This is used
@@ -78,9 +80,10 @@ SAM header of any output."
           (print-avail-commands))
         (cli-error ()
           (princ "Usage: " *error-output*)
-          (help-message cli (documentation (class-name (class-of cli)) 'type)
-                        *error-output*))
-        
+          (let ((msg (documentation (class-name (class-of cli)) 'type)))
+            (if msg
+                (help-message msg *error-output*)
+                (warn "No help was found for ~a" cmd))))
         (file-error (condition)
           (format *error-output* "~a~%" condition)
           (error condition))))
@@ -119,5 +122,16 @@ SAM header of any output."
   (:documentation "quality-plot --sample-name <name> --input-file <filename>
 --plot-file <filename>"))
 
+(define-cli pattern-report-cli (cli sample-name-mixin input-file-mixin)
+  ((report-file "report-file" :required-option t :value-type 'string
+                :documentation "The plot file.")
+   (pattern-char "pattern-char" :required-option t :value-type 'character
+                 :documentation "The pattern character.")
+   (min-freq "min-freq" :required-option t :value-type 'integer
+             :documentation "The minimum pattern frequency to be reported."))
+  (:documentation "pattern-report --sample-name <name> --input-file <filename>
+--report-file <filename> --pattern-char <character> --min-freq <frequency>"))
+
 (register-command "about" 'about-cli #'about)
 (register-command "quality-plot" 'quality-plot-cli #'quality-plot)
+(register-command "pattern-report" 'pattern-report-cli #'pattern-report)

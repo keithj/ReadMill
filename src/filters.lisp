@@ -58,7 +58,28 @@ automatically written to the underlying stream.
 The COMPRESS and NULL-PADDING keyword arguments are only applicable on
 writing where they control whether the header block should be
 compressed and whether the header string should be padded with nulls
-to allow space for expansion."
+to allow space for expansion.
+
+For example:
+
+To count all records in a BAM file:
+
+;;; (with-bam (in (header) \"in.bam\")
+;;;   (declare (ignore header))
+;;;   (loop
+;;;      while (has-more-p in)
+;;;      count (next in)))
+
+To copy only records with a mapping quality of >= 30 to another BAM
+file:
+
+;;; (with-bam (in (h n r) \"in.bam\")
+;;;   (with-bam (out (h n r) \"out.bam\" :direction :output)
+;;;     (let ((q30 (discarding-if (lambda (x)
+;;;                                 (< (mapping-quality x) 30)) in)))
+;;;       (loop
+;;;          while (has-more-p q30)
+;;;          do (consume out (next q30))))))"
   (with-gensyms (bgzf)
     `(with-bgzf (,bgzf ,filespec ,@(remove-key-values
                                     '(:compress :null-padding) args))
@@ -177,3 +198,4 @@ IN."
   (let ((batches ()))
     (dotimes (x m (nreverse batches))
       (push (collect in n) batches))))
+

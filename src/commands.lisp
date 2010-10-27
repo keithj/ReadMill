@@ -46,7 +46,13 @@
 (defun quality-plot (parsed-args &optional argv)
   "Applies the mean base quality plot CLI to PARSED-ARGS."
   (declare (ignore argv))
-  (apply #'plot-mean-qualities (mapcar (lambda (option)
-                                         (option-value option parsed-args))
-                                       '(plot-file sample-name input-file))))
+  (apply #'write-quality-plot (mapcar (lambda (option)
+                                        (option-value option parsed-args))
+                                      '(plot-file sample-name input-file))))
 
+(defun pattern-report (parsed-args &optional argv)
+  (declare (ignore argv))
+  (apply #'write-pattern-report
+         (mapcar (lambda (option)
+                   (option-value option parsed-args))
+                 '(report-file sample-name pattern-char min-freq input-file))))
