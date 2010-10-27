@@ -19,7 +19,62 @@
 
 (in-package :uk.ac.sanger.readmill)
 
-(defun make-filter-predicate (predicate)
+;; (defmacro with-bam-input ((var (header &optional num-refs ref-meta)
+;;                                filespec &rest args) &body body)
+;;   (with-gensyms (bgzf)
+;;     `(with-bgzf (,bgzf ,filespec ,@args)
+;;        (multiple-value-bind (,header ,@(when num-refs `(,num-refs))
+;;                                      ,@(when ref-meta `(,ref-meta)))
+;;            (read-bam-meta ,bgzf)
+;;          (let ((,var (make-bam-input ,bgzf)))
+;;            ,@body)))))
+
+;; (defmacro with-bam-output ((var (header num-refs ref-meta &key (compress t)
+;;                                         (null-padding 0)) filespec &rest args)
+;;                            &body body)
+;;   (with-gensyms (bgzf)
+;;     `(with-bgzf (,bgzf ,filespec ,@args)
+;;        (write-bam-meta ,bgzf ,header ,num-refs ,ref-meta :compress ,compress
+;;                        :null-padding ,null-padding)
+;;        (let ((,var (make-bam-output ,bgzf)))
+;;          ,@body))))
+
+(defmacro with-bam ((var (header &optional num-refs ref-meta) filespec
+                         &rest args &key (compress t) (null-padding 0)
+                         &allow-other-keys)
+                    &body body)
+  "Evaluates BODY with VAR bound to a newly opened BAM iterator on
+pathname designator FILESPEC. The direction (:input versus :output) is
+determined by the stream-opening arguments in ARGS.
+
+On reading, HEADER, NUM-REFS and REF-META will be automatically bound
+to the BAM file metadata i.e. the metadata are read automatically and
+the iterator positioned before the first alignment record.
+
+On writing, HEADER, NUM-REFS and REF-META should be bound to
+appropriate values for the BAM file metadata, which will be
+automatically written to the underlying stream.
+
+The COMPRESS and NULL-PADDING keyword arguments are only applicable on
+writing where they control whether the header block should be
+compressed and whether the header string should be padded with nulls
+to allow space for expansion."
+  (with-gensyms (bgzf)
+    `(with-bgzf (,bgzf ,filespec ,@(remove-key-values
+                                    '(:compress :null-padding) args))
+       ,@(if (search '(:direction :output) args)
+             `((write-bam-meta ,bgzf ,header ,num-refs ,ref-meta
+                               :compress ,compress
+                               :null-padding ,null-padding)
+               (let ((,var (make-bam-output ,bgzf)))
+                 ,@body))
+             `((multiple-value-bind (,header ,@(when num-refs `(,num-refs))
+                                             ,@(when ref-meta `(,ref-meta)))
+                   (read-bam-meta ,bgzf)
+                 (let ((,var (make-bam-input ,bgzf)))
+                   ,@body)))))))
+
+(defun make-counting-predicate (predicate)
   "Returns a copy of PREDICATE that counts the number of alignments
 filtered and the number passed. PREDICATE should accept a BAM
 record. The returned function returns three values; the return value
@@ -41,42 +96,84 @@ BAM record argument and the number of times that it has returned T."
              (incf filtered)
              (values nil filtered passed))))))
 
-(defun collect-mxn (bam m n)
-  "Collects M lists of up to N records from BAM stream."
-  (declare (optimize (speed 3)))
-  (declare (type fixnum m n))
-  (loop
-     repeat m
-     collect (loop
-                repeat n
-                for aln = (read-alignment bam)
-                while aln
-                collect aln)))
+(defun make-bam-input (bam)
+  "Returns a generator function that returns BAM alignment records for
+BAM stream BAM. The standard generator interface functions NEXT and
+HAS-MORE-P may be used in operations on the returned generator.
 
-(defun filter-bam (bam1 bam2 predicate &key (threads 1) (batch-size 1000))
-  "Reads BAM records from BAM1 and writes any for which function
-PREDICATE returns T, to BAM2. Calls to PREDICATE may be run in batches
-under separate threads, each processing BATCH-SIZE records.
+For example:
+
+To count all records in a BAM file:
+
+;;; (with-bgzf (bam \"in.bam\")
+;;;   (read-bam-meta bam)
+;;;   (let ((in (make-bam-input bam)))
+;;;     (loop
+;;;        while (has-more-p in)
+;;;        count (next in))))
+
+To copy only records with a mapping quality of >= 30 to another BAM
+file:
+
+;;; (with-bgzf (bam-in \"in.bam\")
+;;;   (with-bgzf (bam-out \"out.bam\" :direction :output)
+;;;     (multiple-value-bind (header num-refs ref-meta)
+;;;         (read-bam-meta bam-in)
+;;;       (write-bam-meta bam-out header num-refs ref-meta))
+;;;     (let ((fn (discarding-if (lambda (x)
+;;;                                (< (mapping-quality x) 30))
+;;;                              (make-bam-input bam-in))))
+;;;       (loop
+;;;          while (has-more-p fn)
+;;;          do (write-alignment bam-out (next fn))))))"
+  (let ((current (read-alignment bam)))
+    (defgenerator
+        (more (not (null current)))
+        (next (prog1
+                  current
+                (setf current (read-alignment bam)))))))
+
+(defun make-bam-output (bam)
+  "Returns a consumer function that accepts an argument of a BAM
+record and writes it to BAM output stream BAM. The standard consumer
+interface function CONSUME may be used in operations on the returned
+consumer."
+  (lambda (aln)
+    (write-alignment bam aln)))
+
+(defun batch-filter (in out predicate &key (threads 1) (batch-size 1000))
+    "Obtains values from generator function IN and passes any for
+which function PREDICATE does not return T, to consumer function
+OUT (i.e. acts like CL:DELETE-IF). Calls to PREDICATE may be run in
+batches under separate threads, each processing BATCH-SIZE records.
 
 The return values are a list of the filter predicates created and a
-list of the counts of BAM records tested and passed."
+list of the counts of values tested and passed."
+    (declare (optimize (speed 3)))
+    (declare (type fixnum threads batch-size))
+    (let ((fns (mapcar #'make-counting-predicate (loop
+                                                    repeat threads
+                                                    collect predicate))))
+      (loop
+         for batches of-type list = (collect-mxn in threads batch-size)
+         until (every #'null batches)
+         do (let ((futures (mapcar (lambda (fn batch)
+                                     (declare (type function fn)
+                                              (type list batch))
+                                     (eager-future:pexec
+                                      (delete-if fn batch))) fns batches)))
+              (dolist (result (mapcar #'eager-future:yield futures))
+                (dolist (x result)
+                  (consume out x)))))
+      (values fns (mapcar (lambda (fn)
+                            (declare (type function fn))
+                            (multiple-value-list (funcall fn))) fns))))
+
+(defun collect-mxn (in m n)
+  "Collects M lists of up to N records each from BAM producer function
+IN."
   (declare (optimize (speed 3)))
-  (declare (type fixnum threads batch-size))
-  (let ((fns (mapcar #'make-filter-predicate
-                     (loop
-                        repeat threads
-                        collect predicate))))
-    (loop
-       for batches of-type list = (collect-mxn bam1 threads batch-size)
-       until (every #'null batches)
-       do (let ((futures (mapcar (lambda (fn batch)
-                                   (declare (type function fn)
-                                            (type list batch))
-                                   (eager-future:pexec
-                                     (delete-if fn batch))) fns batches)))
-            (dolist (result (mapcar #'eager-future:yield futures))
-              (dolist (aln result)
-                (write-alignment bam2 aln)))))
-    (values fns (mapcar (lambda (fn)
-                          (declare (type function fn))
-                          (multiple-value-list (funcall fn))) fns))))
+  (declare (type fixnum m n))
+  (let ((batches ()))
+    (dotimes (x m (nreverse batches))
+      (push (collect in n) batches))))
