@@ -19,27 +19,7 @@
 
 (in-package :uk.ac.sanger.readmill)
 
-;; (defmacro with-bam-input ((var (header &optional num-refs ref-meta)
-;;                                filespec &rest args) &body body)
-;;   (with-gensyms (bgzf)
-;;     `(with-bgzf (,bgzf ,filespec ,@args)
-;;        (multiple-value-bind (,header ,@(when num-refs `(,num-refs))
-;;                                      ,@(when ref-meta `(,ref-meta)))
-;;            (read-bam-meta ,bgzf)
-;;          (let ((,var (make-bam-input ,bgzf)))
-;;            ,@body)))))
-
-;; (defmacro with-bam-output ((var (header num-refs ref-meta &key (compress t)
-;;                                         (null-padding 0)) filespec &rest args)
-;;                            &body body)
-;;   (with-gensyms (bgzf)
-;;     `(with-bgzf (,bgzf ,filespec ,@args)
-;;        (write-bam-meta ,bgzf ,header ,num-refs ,ref-meta :compress ,compress
-;;                        :null-padding ,null-padding)
-;;        (let ((,var (make-bam-output ,bgzf)))
-;;          ,@body))))
-
-(defmacro with-bam ((var (header &optional num-refs ref-meta) filespec
+(defmacro with-bam ((var (&optional header num-refs ref-meta) filespec
                          &rest args &key (compress t) (null-padding 0)
                          &allow-other-keys)
                     &body body)
@@ -81,19 +61,25 @@ file:
 ;;;          while (has-more-p q30)
 ;;;          do (consume out (next q30))))))"
   (with-gensyms (bgzf)
-    `(with-bgzf (,bgzf ,filespec ,@(remove-key-values
-                                    '(:compress :null-padding) args))
-       ,@(if (search '(:direction :output) args)
-             `((write-bam-meta ,bgzf ,header ,num-refs ,ref-meta
-                               :compress ,compress
-                               :null-padding ,null-padding)
-               (let ((,var (make-bam-output ,bgzf)))
-                 ,@body))
-             `((multiple-value-bind (,header ,@(when num-refs `(,num-refs))
-                                             ,@(when ref-meta `(,ref-meta)))
-                   (read-bam-meta ,bgzf)
-                 (let ((,var (make-bam-input ,bgzf)))
-                   ,@body)))))))
+    (let ((default-header (with-output-to-string (s)
+                            (write-sam-header
+                             `((:HD (:VN . ,*sam-version*))) s))))
+      `(with-bgzf (,bgzf ,filespec ,@(remove-key-values
+                                      '(:compress :null-padding) args))
+         ,@(if (search '(:direction :output) args)
+               `((write-bam-meta ,bgzf
+                                 ,(or header default-header)
+                                 ,(or num-refs 0) ,ref-meta
+                                 :compress ,compress
+                                 :null-padding ,null-padding)
+                 (let ((,var (make-bam-output ,bgzf)))
+                   ,@body))
+               `((multiple-value-bind (,@(when header `(,header))
+                                       ,@(when num-refs `(,num-refs))
+                                       ,@(when ref-meta `(,ref-meta)))
+                     (read-bam-meta ,bgzf)
+                   (let ((,var (make-bam-input ,bgzf)))
+                     ,@body))))))))
 
 (defun make-counting-predicate (predicate)
   "Returns a copy of PREDICATE that counts the number of alignments
@@ -172,30 +158,40 @@ The return values are a list of the filter predicates created and a
 list of the counts of values tested and passed."
     (declare (optimize (speed 3)))
     (declare (type fixnum threads batch-size))
-    (let ((fns (mapcar #'make-counting-predicate (loop
-                                                    repeat threads
-                                                    collect predicate))))
-      (loop
-         for batches of-type list = (collect-mxn in threads batch-size)
-         until (every #'null batches)
-         do (let ((futures (mapcar (lambda (fn batch)
-                                     (declare (type function fn)
-                                              (type list batch))
-                                     (eager-future:pexec
-                                      (delete-if fn batch))) fns batches)))
-              (dolist (result (mapcar #'eager-future:yield futures))
-                (dolist (x result)
-                  (consume out x)))))
-      (values fns (mapcar (lambda (fn)
-                            (declare (type function fn))
-                            (multiple-value-list (funcall fn))) fns))))
+    (flet ((collect-batches (m n)
+             (let ((batches ()))
+               (dotimes (x m (nreverse batches))
+                 (push (collect in n) batches))))
+           (process-batch (fn batch)
+             (declare (type function fn)
+                      (type list batch))
+             (eager-future:pexec (delete-if fn batch))))
+      (let ((fns (mapcar #'make-counting-predicate (loop
+                                                      repeat threads
+                                                      collect predicate))))
+        (loop
+           for batches of-type list = (collect-batches threads batch-size)
+           until (every #'null batches)
+           do (let ((futures (mapcar #'process-batch fns batches)))
+                (dolist (result (mapcar #'eager-future:yield futures))
+                  (dolist (x result)
+                    (consume out x)))))
+        (values fns (mapcar (lambda (fn)
+                              (declare (type function fn))
+                              (multiple-value-list (funcall fn))) fns)))))
 
-(defun collect-mxn (in m n)
-  "Collects M lists of up to N records each from BAM producer function
-IN."
-  (declare (optimize (speed 3)))
-  (declare (type fixnum m n))
-  (let ((batches ()))
-    (dotimes (x m (nreverse batches))
-      (push (collect in n) batches))))
-
+(defun maybe-filter-rg (bam header &optional read-group)
+  (if read-group
+      (let ((rg (find read-group (header-records (make-sam-header header) :rg)
+                      :key (lambda (record)
+                             (header-value record :id))
+                      :test #'string=)))
+        (check-arguments rg (read-group) "this read-group is not present")
+        (values
+         (discarding-if (lambda (aln)
+                          (string/= read-group
+                                    (assocdr :rg (alignment-tag-values aln))))
+                        bam)
+         (format nil "read group ~a ~a~@[ (~a)~]" read-group
+                 (header-value rg :sm) (header-value rg :pu))))
+      (values bam "all read groups")))

@@ -20,7 +20,7 @@
 (in-package :uk.ac.sanger.readmill)
 
 (defvar *software-name* "ReadMill")
-(defvar *software-version* "0.0.1"
+(defvar *software-version* "0.0.2"
   "The version number of the ReadMill application.")
 
 (defun about (parsed-args &optional argv)
@@ -48,11 +48,11 @@
   (declare (ignore argv))
   (apply #'write-quality-plot (mapcar (lambda (option)
                                         (option-value option parsed-args))
-                                      '(plot-file sample-name input-file))))
+                                      '(plot-file input-file read-group))))
 
 (defun pattern-report (parsed-args &optional argv)
   (declare (ignore argv))
   (apply #'write-pattern-report
          (mapcar (lambda (option)
                    (option-value option parsed-args))
-                 '(report-file sample-name pattern-char min-freq input-file))))
+                 '(report-file pattern-char min-freq input-file read-group))))

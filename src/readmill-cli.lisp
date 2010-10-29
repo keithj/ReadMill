@@ -64,30 +64,35 @@ SAM header of any output."
 
 (defun readmill-cli ()
   "Applies the appropriate command line interface."
-  (with-cli (argv :quit t :error-status 1)
-    (let* ((cmd (first argv))
-           (args (rest argv))
-           (cli (get-cli cmd)))
-      (handler-case
-          (cond ((null cmd)
-                 (print-avail-commands))
-                (cli
-                 (funcall (get-fn cmd) (parse-command-line cli args) argv))
-                (t
-                 (error 'unknown-command :command cmd)))
-        (unknown-command (condition)
-          (format *error-output* "Error: ~a~%" condition)
-          (print-avail-commands))
-        (cli-error ()
-          (princ "Usage: " *error-output*)
-          (let ((msg (documentation (class-name (class-of cli)) 'type)))
-            (if msg
-                (help-message msg *error-output*)
-                (warn "No help was found for ~a" cmd))))
-        (file-error (condition)
-          (format *error-output* "~a~%" condition)
-          (error condition))))
-    (quit-lisp :status 0)))
+  (flet ((errmsg (c)
+           (write-line (string-capitalize (format nil "~a" c) :end 1)
+                       *error-output*)))
+    (with-cli (argv :quit t :error-status 1)
+      (let* ((cmd (first argv))
+             (args (rest argv))
+             (cli (get-cli cmd)))
+        (handler-case
+            (cond ((null cmd)
+                   (print-avail-commands))
+                  (cli
+                   (funcall (get-fn cmd) (parse-command-line cli args) argv))
+                  (t
+                   (error 'unknown-command :command cmd)))
+          (unknown-command (condition)
+            (errmsg condition)
+            (print-avail-commands)
+            (quit-lisp :status 2))
+          (cli-error ()
+            (princ "Usage: " *error-output*)
+            (let ((msg (documentation (class-name (class-of cli)) 'type)))
+              (if msg
+                  (help-message msg *error-output*)
+                  (warn "No help was found for ~a~%" cmd)))
+            (quit-lisp :status 3))
+          (error (condition)
+            (errmsg condition)
+            (quit-lisp :status 4))))
+      (quit-lisp :status 0))))
 
 (define-cli verbosity-mixin ()
   ((verbose "verbose" :required-option nil :value-type t
@@ -107,7 +112,7 @@ SAM header of any output."
 
 (define-cli read-group-mixin ()
   ((read-group "read-group" :required-option nil :value-type 'string
-               :documentation "The read group.")))
+               :documentation "The read group ID.")))
 
 (define-cli about-cli (cli)
   ((platform "platform" :required-option nil :value-type t
@@ -116,20 +121,20 @@ SAM header of any output."
             :documentation "Reports the software version."))
   (:documentation "about [--platform] [--version]"))
 
-(define-cli quality-plot-cli (cli sample-name-mixin input-file-mixin)
+(define-cli quality-plot-cli (cli read-group-mixin input-file-mixin)
   ((plot-file "plot-file" :required-option t :value-type 'string
               :documentation "The plot file."))
-  (:documentation "quality-plot --sample-name <name> --input-file <filename>
+  (:documentation "quality-plot [--read-group <id>] --input-file <filename>
 --plot-file <filename>"))
 
-(define-cli pattern-report-cli (cli sample-name-mixin input-file-mixin)
+(define-cli pattern-report-cli (cli read-group-mixin input-file-mixin)
   ((report-file "report-file" :required-option t :value-type 'string
                 :documentation "The plot file.")
    (pattern-char "pattern-char" :required-option t :value-type 'character
                  :documentation "The pattern character.")
    (min-freq "min-freq" :required-option t :value-type 'integer
              :documentation "The minimum pattern frequency to be reported."))
-  (:documentation "pattern-report --sample-name <name> --input-file <filename>
+  (:documentation "pattern-report [--read-group <id>] --input-file <filename>
 --report-file <filename> --pattern-char <character> --min-freq <frequency>"))
 
 (register-command "about" 'about-cli #'about)
