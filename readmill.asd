@@ -21,7 +21,7 @@
 
 (asdf:defsystem readmill
   :name "readmill"
-  :version "0.0.2"
+  :version "0.0.3"
   :author "Keith James"
   :licence "GPL v3"
   :depends-on (:deoxybyte-systems
@@ -36,5 +36,6 @@
                                      (:file "utilities")
                                      (:file "filters")
                                      (:file "read-analysis")
+                                     (:file "read-filtering")
                                      (:file "commands")
                                      (:file "readmill-cli")))))

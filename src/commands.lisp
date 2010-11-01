@@ -19,10 +19,6 @@
 
 (in-package :uk.ac.sanger.readmill)
 
-(defvar *software-name* "ReadMill")
-(defvar *software-version* "0.0.2"
-  "The version number of the ReadMill application.")
-
 (defun about (parsed-args &optional argv)
   "Reports information about the system and exits."
   (declare (ignore argv))
@@ -56,3 +52,9 @@
          (mapcar (lambda (option)
                    (option-value option parsed-args))
                  '(report-file pattern-char min-freq input-file read-group))))
+
+(defun quality-filter (parsed-args &optional argv)
+  (apply #'quality-filter-bam argv
+         (mapcar (lambda (option)
+                   (option-value option parsed-args))
+                 '(input-file output-file min-quality read-start read-end))))

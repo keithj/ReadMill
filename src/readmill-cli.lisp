@@ -86,7 +86,7 @@ SAM header of any output."
             (princ "Usage: " *error-output*)
             (let ((msg (documentation (class-name (class-of cli)) 'type)))
               (if msg
-                  (help-message msg *error-output*)
+                  (help-message cli msg *error-output*)
                   (warn "No help was found for ~a~%" cmd)))
             (quit-lisp :status 3))
           (error (condition)
@@ -102,6 +102,10 @@ SAM header of any output."
   ((input-file "input-file" :required-option t :value-type 'string
                :documentation "The input file.")))
 
+(define-cli output-file-mixin ()
+  ((output-file "output-file" :required-option t :value-type 'string
+                :documentation "The output file.")))
+
 (define-cli json-log-mixin ()
   ((json-file "json-file" :required-option nil :value-type 'string
               :documentation "The JSON output file.")))
@@ -113,6 +117,13 @@ SAM header of any output."
 (define-cli read-group-mixin ()
   ((read-group "read-group" :required-option nil :value-type 'string
                :documentation "The read group ID.")))
+
+(define-cli read-range-mixin ()
+  ((read-start "read-start" :required-option nil :value-type 'integer
+               :documentation "The zero-based start position in the read.")
+   (read-end "read-end" :required-option nil :value-type 'integer
+             :documentation #.(txt "The zero-based, half-open end position"
+                                   "in the read."))))
 
 (define-cli about-cli (cli)
   ((platform "platform" :required-option nil :value-type t
@@ -137,6 +148,16 @@ SAM header of any output."
   (:documentation "pattern-report [--read-group <id>] --input-file <filename>
 --report-file <filename> --pattern-char <character> --min-freq <frequency>"))
 
+(define-cli quality-filter-cli (cli read-range-mixin
+                                input-file-mixin output-file-mixin)
+  ((min-quality "min-quality" :required-option t :value-type 'integer
+                :documentation "The minimum quality threshold."))
+  (:documentation "quality-filter --input-file <filename>
+--output-file <filename> [--read-start <integer>] [--read-end <integer>]
+--min-quality <integer>"))
+
 (register-command "about" 'about-cli #'about)
 (register-command "quality-plot" 'quality-plot-cli #'quality-plot)
 (register-command "pattern-report" 'pattern-report-cli #'pattern-report)
+
+(register-command "quality-filter" 'quality-filter-cli #'quality-filter)

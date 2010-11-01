@@ -78,6 +78,10 @@ file:
                                        ,@(when num-refs `(,num-refs))
                                        ,@(when ref-meta `(,ref-meta)))
                      (read-bam-meta ,bgzf)
+                   ,@(cond (ref-meta
+                            `((declare (ignorable ,header ,num-refs))))
+                           (num-refs
+                            `((declare (ignorable ,header)))))
                    (let ((,var (make-bam-input ,bgzf)))
                      ,@body))))))))
 
@@ -195,3 +199,70 @@ list of the counts of values tested and passed."
          (format nil "read group ~a ~a~@[ (~a)~]" read-group
                  (header-value rg :sm) (header-value rg :pu))))
       (values bam "all read groups")))
+
+(defun make-rg-p (read-group)
+  "Returns a read group filtering predicate that returns T for BAM
+alignments of READ-GROUP."
+  (lambda (aln)
+    (declare (optimize (speed 3)))
+    (declare (type simple-base-string read-group))
+    (let ((tag (assocdr :rg (alignment-tag-values aln))))
+      (when tag
+        (locally (declare (type simple-base-string tag))
+          (string/= read-group tag))))))
+
+(defun make-polyx-p (char length &key (start 0) end)
+  "Returns a homopolymer filtering predicate that returns T for BAM
+alignments containing runs of CHAR or LENGTH or longer, between START
+and END of the alignment unclipped sequence string."
+  (make-subseq-p (make-string length
+                              :element-type 'base-char
+                              :initial-element char) :start start :end end))
+
+(defun make-subseq-p (str &key (start 0) end)
+  "Returns a subsequence matching predicate that returns T for BAM
+alignments containing subsequence STR between START and END of the
+alignment unclipped sequence string."
+  (let ((str (string-upcase str)))
+    (lambda (aln)
+      (declare (optimize (speed 3)))
+      (let ((seq (seq-string aln)))
+        (declare (type simple-base-string seq))
+        (not (search str seq :start2 start :end2 end :test #'char=))))))
+
+(defun make-quality-p (quality-threshold
+                       &key (read-start 0) read-end (test #'<=) (count 1))
+  "Returns a quality matching predicate that returns T for BAM
+alignments having COUNT or more base qualities passing TEST relative
+to QUALITY-THRESHOLD between READ-START and READ-END. Test defaults to
+<= and COUNT defaults to 1, i.e. the default behaviour is to return T
+where at least 1 quality value is <= QUALITY-THRESHOLD between START
+and END."
+  (check-arguments (<= 0 quality-threshold 100) (quality-threshold)
+                   "Quality threshold was not in the range 0-100")
+  (check-arguments (and (integerp count) (plusp count)) (count)
+                   "expected a positive integer")
+  (lambda (aln)
+    (declare (optimize (speed 3)))
+    (let ((qual-str (quality-string aln)))
+      (declare (type simple-base-string qual-str)
+               (type quality-score quality-threshold)
+               (type fixnum count))
+      (>= count (apply #'count quality-threshold
+                       (map-into (make-array (length qual-str)
+                                             :element-type 'quality-score
+                                             :initial-element 0)
+                                 #'decode-phred-quality qual-str)
+                       (mapcan (lambda (k v)
+                                 (when (and k v)
+                                   (list k v)))
+                               '(:start :end :test)
+                               (list read-start read-end test)))))))
+
+;; (with-bam (bam (header nr refs) "/home/keith/c1215-coordinate.bam")
+;;   (let ((reftable (make-reference-table refs))
+;;         (bam (make-quality-filter bam 40)))
+;;     (loop
+;;        while (has-more-p bam)
+;;        do (with-output-to-string (s)
+;;             (write-sam-alignment (next bam) reftable)))))

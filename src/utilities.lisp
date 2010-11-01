@@ -19,6 +19,13 @@
 
 (in-package :uk.ac.sanger.readmill)
 
+(defvar *software-name* "ReadMill")
+(defvar *software-version* "0.0.3"
+  "The version number of the ReadMill application.")
+
+(deftype quality-score ()
+  '(integer 0 100))
+
 (defun peek-alignment (bam)
   "Returns the next alignment in BAM stream, or NIL."
   (let ((pos (bgzf-tell bam)))
