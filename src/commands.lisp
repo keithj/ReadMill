@@ -28,7 +28,7 @@
                    (machine-type)))
          (version-info ()
            (format *standard-output* "ReadMill version ~s~%~%"
-                   *software-version*)))
+                   *readmill-version*)))
     (cond ((and (option-value 'platform parsed-args)
                 (not (option-value 'version parsed-args)))
            (platform-info))
@@ -57,4 +57,10 @@
   (apply #'quality-filter-bam argv
          (mapcar (lambda (option)
                    (option-value option parsed-args))
-                 '(input-file output-file min-quality read-start read-end))))
+                 '(input-file output-file read-start read-end min-quality))))
+
+(defun subseq-filter (parsed-args &optional argv)
+  (apply #'subseq-filter-bam argv
+         (mapcar (lambda (option)
+                   (option-value option parsed-args))
+                 '(input-file output-file read-start read-end queries))))

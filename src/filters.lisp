@@ -91,21 +91,21 @@ filtered and the number passed. PREDICATE should accept a BAM
 record. The returned function returns three values; the return value
 of PREDICATE, the number of times the function has been called with a
 BAM record argument and the number of times that it has returned T."
-  (let ((filtered 0)
+  (let ((called 0)
         (passed 0))
-    (declare (type fixnum filtered passed))
+    (declare (type fixnum called passed))
     (lambda (&optional x)
       (declare (optimize (speed 3) (safety 0)))
       (declare (type function predicate))
       (cond ((null x)
-             (values nil filtered passed))
+             (values x called passed))
             ((funcall predicate x)
-             (incf filtered)
-             (incf passed)
-             (values t filtered passed))
+             (incf called)
+             (values x called passed))
             (t
-             (incf filtered)
-             (values nil filtered passed))))))
+             (incf called)
+             (incf passed)
+             (values nil called passed))))))
 
 (defun make-bam-input (bam)
   "Returns a generator function that returns BAM alignment records for
@@ -153,52 +153,68 @@ consumer."
     (write-alignment bam aln)))
 
 (defun batch-filter (in out predicate &key (threads 1) (batch-size 1000))
-    "Obtains values from generator function IN and passes any for
-which function PREDICATE does not return T, to consumer function
+  "Obtains values from generator function IN and passes any for which
+function PREDICATE does not return T, to consumer function
 OUT (i.e. acts like CL:DELETE-IF). Calls to PREDICATE may be run in
 batches under separate threads, each processing BATCH-SIZE records.
-
 The return values are a list of the filter predicates created and a
 list of the counts of values tested and passed."
-    (declare (optimize (speed 3)))
-    (declare (type fixnum threads batch-size))
-    (flet ((collect-batches (m n)
-             (let ((batches ()))
-               (dotimes (x m (nreverse batches))
-                 (push (collect in n) batches))))
-           (process-batch (fn batch)
-             (declare (type function fn)
-                      (type list batch))
-             (eager-future:pexec (delete-if fn batch))))
-      (let ((fns (mapcar #'make-counting-predicate (loop
-                                                      repeat threads
-                                                      collect predicate))))
-        (loop
-           for batches of-type list = (collect-batches threads batch-size)
-           until (every #'null batches)
-           do (let ((futures (mapcar #'process-batch fns batches)))
-                (dolist (result (mapcar #'eager-future:yield futures))
-                  (dolist (x result)
-                    (consume out x)))))
-        (values fns (mapcar (lambda (fn)
-                              (declare (type function fn))
-                              (multiple-value-list (funcall fn))) fns)))))
+  (declare (optimize (speed 3)))
+  (declare (type fixnum threads batch-size))
+  (flet ((collect-batches (m n)
+           (let ((batches ()))
+             (dotimes (x m (nreverse batches))
+               (push (collect in n) batches))))
+         (process-batch (fn batch)
+           (declare (type function fn)
+                    (type list batch))
+           (eager-future:pexec (delete-if fn batch))))
+    (let ((fns (mapcar #'make-counting-predicate (loop
+                                                    repeat threads
+                                                    collect predicate))))
+      (loop
+         for batches of-type list = (collect-batches threads batch-size)
+         until (every #'null batches)
+         do (let ((futures (mapcar #'process-batch fns batches)))
+              (dolist (result (mapcar #'eager-future:yield futures))
+                (dolist (x result)
+                  (consume out x)))))
+      (mapcar (lambda (fn)
+                (declare (type function fn))
+                (rest (multiple-value-list (funcall fn)))) fns))))
 
-(defun maybe-filter-rg (bam header &optional read-group)
-  (if read-group
-      (let ((rg (find read-group (header-records (make-sam-header header) :rg)
-                      :key (lambda (record)
-                             (header-value record :id))
-                      :test #'string=)))
-        (check-arguments rg (read-group) "this read-group is not present")
-        (values
-         (discarding-if (lambda (aln)
-                          (string/= read-group
-                                    (assocdr :rg (alignment-tag-values aln))))
-                        bam)
-         (format nil "read group ~a ~a~@[ (~a)~]" read-group
-                 (header-value rg :sm) (header-value rg :pu))))
-      (values bam "all read groups")))
+;; Experimental version that uses a list of predicates that are
+;; wrapped in in counters, which are in turn composed into one
+;; function per thread
+(defun batch-multi-filter (in out predicates &key (threads 1) (batch-size 1000))
+  (declare (optimize (speed 3)))
+  (declare (type fixnum threads batch-size))
+  (flet ((collect-batches (m n)
+           (let ((batches ()))
+             (dotimes (x m (nreverse batches))
+               (push (collect in n) batches))))
+         (process-batch (fn batch)
+           (declare (type function fn)
+                    (type list batch))
+           (eager-future:pexec (delete-if fn batch)))
+         (collect-counts (counters)
+           (mapcar (lambda (fn)
+                     (declare (type function fn))
+                     (rest (multiple-value-list (funcall fn)))) counters)))
+    (let* ((counter-sets (loop
+                            repeat threads
+                            collect (mapcar #'make-counting-predicate
+                                            predicates)))
+           (fns (mapcar (lambda (counters)
+                          (apply #'any counters)) counter-sets)))
+      (loop
+         for batches of-type list = (collect-batches threads batch-size)
+         until (every #'null batches)
+         do (let ((futures (mapcar #'process-batch fns batches)))
+              (dolist (passed (mapcar #'eager-future:yield futures))
+                (dolist (obj passed)
+                  (consume out obj)))))
+      (mapcar #'collect-counts counter-sets))))
 
 (defun make-rg-p (read-group)
   "Returns a read group filtering predicate that returns T for BAM
@@ -228,16 +244,17 @@ alignment unclipped sequence string."
       (declare (optimize (speed 3)))
       (let ((seq (seq-string aln)))
         (declare (type simple-base-string seq))
-        (not (search str seq :start2 start :end2 end :test #'char=))))))
+        (search str seq :start2 start :end2 end :test #'string=)))))
 
-(defun make-quality-p (quality-threshold
-                       &key (read-start 0) read-end (test #'<=) (count 1))
+(defun make-quality-p (quality-threshold &rest args
+                       &key (start 0) end (test #'<=) (count 1))
   "Returns a quality matching predicate that returns T for BAM
 alignments having COUNT or more base qualities passing TEST relative
 to QUALITY-THRESHOLD between READ-START and READ-END. Test defaults to
 <= and COUNT defaults to 1, i.e. the default behaviour is to return T
 where at least 1 quality value is <= QUALITY-THRESHOLD between START
 and END."
+  (declare (ignorable start end test))
   (check-arguments (<= 0 quality-threshold 100) (quality-threshold)
                    "Quality threshold was not in the range 0-100")
   (check-arguments (and (integerp count) (plusp count)) (count)
@@ -253,16 +270,20 @@ and END."
                                              :element-type 'quality-score
                                              :initial-element 0)
                                  #'decode-phred-quality qual-str)
-                       (mapcan (lambda (k v)
-                                 (when (and k v)
-                                   (list k v)))
-                               '(:start :end :test)
-                               (list read-start read-end test)))))))
+                       (remove-key-values '(:count) args))))))
 
-;; (with-bam (bam (header nr refs) "/home/keith/c1215-coordinate.bam")
-;;   (let ((reftable (make-reference-table refs))
-;;         (bam (make-quality-filter bam 40)))
-;;     (loop
-;;        while (has-more-p bam)
-;;        do (with-output-to-string (s)
-;;             (write-sam-alignment (next bam) reftable)))))
+(defun maybe-filter-rg (in header &optional read-group)
+  (if read-group
+      (let ((rg (find read-group (header-records (make-sam-header header) :rg)
+                      :key (lambda (record)
+                             (header-value record :id))
+                      :test #'string=)))
+        (check-arguments rg (read-group) "this read-group is not present")
+        (values
+         (discarding-if (lambda (aln)
+                          (string/= read-group
+                                    (assocdr :rg (alignment-tag-values aln))))
+                        in)
+         (format nil "read group ~a ~a~@[ (~a)~]" read-group
+                 (header-value rg :sm) (header-value rg :pu))))
+      (values in "all read groups")))

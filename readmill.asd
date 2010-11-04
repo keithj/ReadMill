@@ -21,12 +21,12 @@
 
 (asdf:defsystem readmill
   :name "readmill"
-  :version "0.0.3"
+  :version "0.0.4"
   :author "Keith James"
   :licence "GPL v3"
   :depends-on (:deoxybyte-systems
                (:version :deoxybyte-run "0.4.6")
-               (:version :cl-sam "0.9.6")
+               (:version :cl-sam "0.9.9")
                (:version :eager-future "0.4.0"))
   :components ((:module :readmill
                         :serial t

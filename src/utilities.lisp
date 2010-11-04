@@ -19,12 +19,20 @@
 
 (in-package :uk.ac.sanger.readmill)
 
-(defvar *software-name* "ReadMill")
-(defvar *software-version* "0.0.3"
+(defvar *readmill-name* "ReadMill")
+(defvar *readmill-version* "0.0.3"
   "The version number of the ReadMill application.")
 
 (deftype quality-score ()
   '(integer 0 100))
+
+(defun any (&rest fns)
+  "Returns a new function that takes one optional argument. When the
+argument is non-null, it returns T if a call to any of FNS with that
+argument would return T."
+  (lambda (&optional arg)
+    (and arg (some (lambda (fn)
+                     (funcall fn arg)) fns))))
 
 (defun peek-alignment (bam)
   "Returns the next alignment in BAM stream, or NIL."
@@ -74,3 +82,11 @@ plot is annotated with TITLE, X-LABEL and Y-LABEL."
                                                :csplines)))))
     (dxr:draw-plot plotter plot :terminal :png :output png-filespec)
     (dxr:stop-gnuplot plotter)))
+
+(defun previous-program (header)
+  "Returns the previous program to be run on the data, if such can be
+deduced unambiguously. If there are more than one leaf programs in the
+tree, returns NIL."
+  (let ((pp (last-programs header)))
+    (when (endp (rest pp))
+      (first pp))))

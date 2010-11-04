@@ -44,7 +44,7 @@ designating a CLI class."
   (let ((commands (sort (loop
                            for cmd being the hash-keys of *readmill-commands*
                            collect cmd) #'string<)))
-    (format stream "ReadMill version ~s~%~%" *software-version*)
+    (format stream "ReadMill version ~s~%~%" *readmill-version*)
     (write-line "Available commands:" stream)
     (terpri stream)
     (mapc (lambda (cmd)
@@ -53,14 +53,6 @@ designating a CLI class."
               (if doc
                   (help-message cli doc stream)
                   (warn "No help was found for ~a" cmd)))) commands)))
-
-(defun make-pg-record (command-line &optional id)
-  "Returns a new ReadMill PG (Program) SAM header record. This is used
-where the ReadMill version and command line are to be recorded in the
-SAM header of any output."
-  (cons :pg (pairlis '(:id :pn :vn :cl)
-                     (list id *software-name* *software-version*
-                           command-line))))
 
 (defun readmill-cli ()
   "Applies the appropriate command line interface."
@@ -91,8 +83,7 @@ SAM header of any output."
             (quit-lisp :status 3))
           (error (condition)
             (errmsg condition)
-            (quit-lisp :status 4))))
-      (quit-lisp :status 0))))
+            (quit-lisp :status 4)))))))
 
 (define-cli verbosity-mixin ()
   ((verbose "verbose" :required-option nil :value-type t
@@ -156,8 +147,17 @@ SAM header of any output."
 --output-file <filename> [--read-start <integer>] [--read-end <integer>]
 --min-quality <integer>"))
 
+(define-cli subseq-filter-cli (cli read-range-mixin
+                               input-file-mixin output-file-mixin)
+  ((queries "queries" :required-option t :value-type 'string-list
+            :documentation "The subsequences to search for."))
+  (:documentation "subseq-filter --input-file <filename>
+--output-file <filename> [--read-start <integer>] [--read-end <integer>]
+--queries <seq1,seq2 ... seqn>"))
+
 (register-command "about" 'about-cli #'about)
 (register-command "quality-plot" 'quality-plot-cli #'quality-plot)
 (register-command "pattern-report" 'pattern-report-cli #'pattern-report)
 
 (register-command "quality-filter" 'quality-filter-cli #'quality-filter)
+(register-command "subseq-filter" 'subseq-filter-cli #'subseq-filter)
