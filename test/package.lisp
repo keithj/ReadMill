@@ -1,5 +1,5 @@
 ;;;
-;;; Copyright (C) 2008-2010 Genome Research Ltd. All rights reserved.
+;;; Copyright (C) 2010 Genome Research Ltd. All rights reserved.
 ;;;
 ;;; This file is part of readmill.
 ;;;
@@ -17,16 +17,8 @@
 ;;; along with this program.  If not, see <http://www.gnu.org/licenses/>.
 ;;;
 
-(in-package :cl-user)
-
-(defpackage :uk.ac.sanger.readmill
-  (:use #:common-lisp
-        #:sam
-        #:deoxybyte-io #:deoxybyte-utilities)
-  (:nicknames #:readmill)
-  (:export
-   #:readmill-cli
-
-   #:base-patterns
-
-   #:fake-bam-file))
+(defpackage :uk.ac.sanger.readmill-test
+  (:use #:common-lisp #:deoxybyte-utilities #:deoxybyte-io
+        #:readmill #:sam #:lift)
+  (:documentation "ReadMill tests.")
+  (:export #:readmill-tests))

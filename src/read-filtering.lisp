@@ -34,9 +34,9 @@ header record."
                           :command-line (format nil "~{~a~^ ~}" cmd))))
       (with-bam (out ((with-output-to-string (s)
                         (write-sam-header
-                         (add-pg-record hd pg) s)) num-refs ref-meta) output-file
-                         :direction :output
-                         :if-does-not-exist :create :if-exists :overwrite)
+                         (add-pg-record hd pg) s)) num-refs ref-meta)
+                     output-file :direction :output
+                     :if-does-not-exist :create :if-exists :overwrite)
         (let* ((start (or start 0))
                (qfilter (make-counting-predicate
                          (make-quality-p quality-threshold
@@ -61,9 +61,9 @@ record."
                           :command-line (format nil "~{~a~^ ~}" cmd))))
       (with-bam (out ((with-output-to-string (s)
                         (write-sam-header
-                         (add-pg-record hd pg) s)) num-refs ref-meta) output-file
-                         :direction :output
-                         :if-does-not-exist :create :if-exists :overwrite)
+                         (add-pg-record hd pg) s)) num-refs ref-meta)
+                     output-file :direction :output
+                     :if-does-not-exist :create :if-exists :overwrite)
         (let* ((start (or start 0))
                (fns (mapcar (lambda (query)
                               (make-counting-predicate
@@ -82,8 +82,8 @@ record."
   (with-bam (in (header num-refs ref-meta) input-file)
     (let* ((hd (make-sam-header header))
            (pg (pg-record "readmill-subseq-filter"
-                          :program-name *software-name*
-                          :program-version *software-version*
+                          :program-name *readmill-name*
+                          :program-version *readmill-version*
                           :previous-program (previous-program hd)
                           :command-line (format nil "~{~a~^ ~}" cmd))))
       (with-bam (out ((with-output-to-string (s)

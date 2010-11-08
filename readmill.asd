@@ -19,6 +19,10 @@
 
 (in-package :cl-user)
 
+(asdf:load-system :deoxybyte-systems)
+
+(in-package :uk.co.deoxybyte-systems)
+
 (asdf:defsystem readmill
   :name "readmill"
   :version "0.0.4"
@@ -26,8 +30,9 @@
   :licence "GPL v3"
   :depends-on (:deoxybyte-systems
                (:version :deoxybyte-run "0.4.6")
-               (:version :cl-sam "0.9.9")
+               (:version :cl-sam "0.10.0")
                (:version :eager-future "0.4.0"))
+  :in-order-to ((test-op (load-op :readmill :readmill-test)))
   :components ((:module :readmill
                         :serial t
                         :pathname "src/"
@@ -38,4 +43,10 @@
                                      (:file "read-analysis")
                                      (:file "read-filtering")
                                      (:file "commands")
-                                     (:file "readmill-cli")))))
+                                     (:file "readmill-cli")))
+               (:lift-test-config :lift-tests
+                                  :pathname "readmill-test"
+                                  :target-system :readmill)
+               (:cldoc-config :cldoc-documentation
+                              :pathname "doc/html/"
+                              :target-system :readmill)))
