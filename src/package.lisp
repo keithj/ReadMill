@@ -27,6 +27,9 @@
   (:export
    #:readmill-cli
 
+   #:make-rg-p
+   #:make-quality-p
+   #:make-subseq-p
    #:base-patterns
 
    #:fake-bam-file))

@@ -110,7 +110,7 @@ list of the counts of values tested and passed."
 alignments of READ-GROUP."
   (lambda (aln)
     (declare (optimize (speed 3)))
-    (declare (type simple-base-string read-group))
+    (declare (type (simple-array character (*)) read-group))
     (let ((tag (assocdr :rg (alignment-tag-values aln))))
       (when tag
         (locally (declare (type simple-base-string tag))
