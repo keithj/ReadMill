@@ -25,13 +25,14 @@
 
 (asdf:defsystem readmill
   :name "readmill"
-  :version "0.0.4"
+  :version "0.0.5"
   :author "Keith James"
   :licence "GPL v3"
   :depends-on (:deoxybyte-systems
                (:version :deoxybyte-run "0.4.6")
                (:version :cl-sam "0.10.0")
-               (:version :eager-future "0.4.0"))
+               (:version :eager-future "0.4.0")
+               (:version :cl-json "0.4.0"))
   :in-order-to ((test-op (load-op :readmill :readmill-test)))
   :components ((:module :readmill
                         :serial t
@@ -39,6 +40,7 @@
                         :components ((:file "package")
                                      (:file "conditions")
                                      (:file "utilities")
+                                     (:file "json")
                                      (:file "filters")
                                      (:file "read-analysis")
                                      (:file "read-filtering")

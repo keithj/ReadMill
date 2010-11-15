@@ -41,41 +41,17 @@ BAM record argument and the number of times that it has returned T."
              (incf passed)
              (values nil called passed))))))
 
-(defun batch-filter (in out predicate &key (threads 1) (batch-size 1000))
-  "Obtains values from generator function IN and passes any for which
-function PREDICATE does not return T, to consumer function
-OUT (i.e. acts like CL:DELETE-IF). Calls to PREDICATE may be run in
-batches under separate threads, each processing BATCH-SIZE records.
-The return values are a list of the filter predicates created and a
-list of the counts of values tested and passed."
-  (declare (optimize (speed 3)))
-  (declare (type fixnum threads batch-size))
-  (flet ((collect-batches (m n)
-           (let ((batches ()))
-             (dotimes (x m (nreverse batches))
-               (push (collect in n) batches))))
-         (process-batch (fn batch)
-           (declare (type function fn)
-                    (type list batch))
-           (eager-future:pexec (delete-if fn batch))))
-    (let ((fns (mapcar #'make-counting-predicate (loop
-                                                    repeat threads
-                                                    collect predicate))))
-      (loop
-         for batches of-type list = (collect-batches threads batch-size)
-         until (every #'null batches)
-         do (let ((futures (mapcar #'process-batch fns batches)))
-              (dolist (result (mapcar #'eager-future:yield futures))
-                (dolist (x result)
-                  (consume out x)))))
-      (mapcar (lambda (fn)
-                (declare (type function fn))
-                (rest (multiple-value-list (funcall fn)))) fns))))
-
 ;; Experimental version that uses a list of predicates that are
 ;; wrapped in in counters, which are in turn composed into one
 ;; function per thread
-(defun batch-multi-filter (in out predicates &key (threads 1) (batch-size 1000))
+(defun batch-filter (in out predicates &key (threads 1) (batch-size 1000))
+  "Obtains values from generator function IN and passes any for which
+any of functions PREDICATES do not return T, to consumer function
+OUT (i.e. acts like CL:DELETE-IF). Calls to PREDICATES may be run in
+batches under separate threads, each processing BATCH-SIZE records.
+The return value is a list of lists, each containing the counts of
+values tested and passed as the first and seconf elements,
+respectively."
   (declare (optimize (speed 3)))
   (declare (type fixnum threads batch-size))
   (flet ((collect-batches (m n)
@@ -89,12 +65,18 @@ list of the counts of values tested and passed."
          (collect-counts (counters)
            (mapcar (lambda (fn)
                      (declare (type function fn))
-                     (rest (multiple-value-list (funcall fn)))) counters)))
+                     (rest (multiple-value-list (funcall fn)))) counters))
+         (aggregate-counts (count-lists)
+           (apply #'mapcar (lambda (&rest args)
+                             args) count-lists))
+         (sum-counts (counts)
+           (list (reduce #'+ counts :key #'first)
+                 (reduce #'+ counts :key #'second))))
     (let* ((counter-sets (loop
                             repeat threads
                             collect (mapcar #'make-counting-predicate
                                             predicates)))
-           (fns (mapcar (lambda (counters)
+           (fns (mapcar (lambda (counters)   ; one fn per thread
                           (apply #'any counters)) counter-sets)))
       (loop
          for batches of-type list = (collect-batches threads batch-size)
@@ -103,7 +85,8 @@ list of the counts of values tested and passed."
               (dolist (passed (mapcar #'eager-future:yield futures))
                 (dolist (obj passed)
                   (consume out obj)))))
-      (mapcar #'collect-counts counter-sets))))
+      (mapcar #'sum-counts
+              (aggregate-counts (mapcar #'collect-counts counter-sets))))))
 
 (defun make-rg-p (read-group)
   "Returns a read group filtering predicate that returns T for BAM

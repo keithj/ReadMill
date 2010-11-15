@@ -123,3 +123,29 @@ number of reads examined."
                           collect (cons (make-mask read-length pos) freq)
                           into summary
                           finally (return (values summary read-count)))))))
+
+(defun hamming-search (seq1 seq2 &key (start1 0) end1 (start2 0) end2
+                       (max-distance 1))
+  (declare (optimize (speed 3)))
+  (declare (type simple-base-string seq1 seq2))
+  (let ((end1 (or end1 (length seq1)))
+        (end2 (or end2 (length seq2))))
+    (declare (type vector-index start1 start2 end1 end2 max-distance))
+    (flet ((hamdist (s1 e1 s2 e2)
+             (declare (optimize (safety 0)))
+             (loop
+                for i from s1 below e1
+                for j from s2 below e2
+                when (char/= (char seq1 i) (char seq2 j))
+                count i)))
+    (let ((len1 (- end1 start1)) position distance)
+      (loop
+         for i of-type vector-index from start2 to (- end2 len1)
+         for j of-type vector-index = (+ i len1)
+         for d = (hamdist start1 end1 i j)
+         for found = (<= d max-distance)
+         do (when found
+              (setf position i
+                    distance d))
+         until found
+         finally (return (values position distance)))))))

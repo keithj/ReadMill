@@ -139,25 +139,18 @@ designating a CLI class."
   (:documentation "pattern-report [--read-group <id>] --input-file <filename>
 --report-file <filename> --pattern-char <character> --min-freq <frequency>"))
 
-(define-cli quality-filter-cli (cli read-range-mixin
-                                input-file-mixin output-file-mixin)
-  ((min-quality "min-quality" :required-option t :value-type 'integer
-                :documentation "The minimum quality threshold."))
-  (:documentation "quality-filter --input-file <filename>
+(define-cli read-filter-cli (cli read-range-mixin
+                             input-file-mixin output-file-mixin json-log-mixin)
+  ((min-quality "min-quality" :required-option nil :value-type 'integer
+                :documentation "The minimum quality threshold.")
+   (queries "queries" :required-option nil :value-type 'string-list
+            :documentation "Subsequences to search for."))
+  (:documentation "read-filter --input-file <filename>
 --output-file <filename> [--read-start <integer>] [--read-end <integer>]
---min-quality <integer>"))
-
-(define-cli subseq-filter-cli (cli read-range-mixin
-                               input-file-mixin output-file-mixin)
-  ((queries "queries" :required-option t :value-type 'string-list
-            :documentation "The subsequences to search for."))
-  (:documentation "subseq-filter --input-file <filename>
---output-file <filename> [--read-start <integer>] [--read-end <integer>]
---queries <seq1,seq2 ... seqn>"))
+[--min-quality <integer>] [--queries <seq1,seq2 ... seqn>]
+[--json-log <filename>]"))
 
 (register-command "about" 'about-cli #'about)
 (register-command "quality-plot" 'quality-plot-cli #'quality-plot)
 (register-command "pattern-report" 'pattern-report-cli #'pattern-report)
-
-(register-command "quality-filter" 'quality-filter-cli #'quality-filter)
-(register-command "subseq-filter" 'subseq-filter-cli #'subseq-filter)
+(register-command "read-filter" 'read-filter-cli #'read-filter)
