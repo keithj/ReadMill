@@ -107,7 +107,7 @@ designating a CLI class."
 
 (define-cli read-group-mixin ()
   ((read-group "read-group" :required-option nil :value-type 'string
-               :documentation "The read group ID.")))
+               :documentation "The restrict results to one read group.")))
 
 (define-cli read-range-mixin ()
   ((read-start "read-start" :required-option nil :value-type 'integer
@@ -144,11 +144,13 @@ designating a CLI class."
   ((min-quality "min-quality" :required-option nil :value-type 'integer
                 :documentation "The minimum quality threshold.")
    (queries "queries" :required-option nil :value-type 'string-list
-            :documentation "Subsequences to search for."))
+            :documentation "Subsequences to search for.")
+   (orphans "orphans" :required-option nil :value-type t
+            :documentation "Include orphans in output."))
   (:documentation "read-filter --input-file <filename>
 --output-file <filename> [--read-start <integer>] [--read-end <integer>]
 [--min-quality <integer>] [--queries <seq1,seq2 ... seqn>]
-[--json-log <filename>]"))
+[--orphans] [--json-log <filename>]"))
 
 (register-command "about" 'about-cli #'about)
 (register-command "quality-plot" 'quality-plot-cli #'quality-plot)

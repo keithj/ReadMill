@@ -32,4 +32,4 @@
    #:make-subseq-p
    #:base-patterns
 
-   #:fake-bam-file))
+   #:pair-consumer))

@@ -25,12 +25,12 @@
 
 (asdf:defsystem readmill
   :name "readmill"
-  :version "0.0.5"
+  :version "0.0.6"
   :author "Keith James"
   :licence "GPL v3"
   :depends-on (:deoxybyte-systems
                (:version :deoxybyte-run "0.4.6")
-               (:version :cl-sam "0.10.0")
+               (:version :cl-sam "0.12.1")
                (:version :eager-future "0.4.0")
                (:version :cl-json "0.4.0"))
   :in-order-to ((test-op (load-op :readmill :readmill-test)))

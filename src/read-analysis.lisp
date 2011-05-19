@@ -24,8 +24,12 @@
 Will accept reads of mixed length without warning. If READ-GROUP is
 provided, restricts plotting to those reads only."
   (with-bam (bam (header) bam-filespec)
-    (multiple-value-bind (bam title)
-        (maybe-filter-rg bam header read-group)
+    (let ((bam (if read-group
+                   (discarding-if (complement (make-rg-p read-group)) bam)
+                   bam))
+          (title (if read-group
+                     (rg-description header read-group)
+                     "all read groups")))
       (do* ((aln (next bam) (next bam))
             (rlen 0 (if aln
                         (read-length aln)
@@ -69,8 +73,12 @@ Returns:
 
 - report-filespec."
   (with-bam (bam (header) bam-filespec)
-    (multiple-value-bind (bam title)
-        (maybe-filter-rg bam header read-group)
+    (let ((bam (if read-group
+                   (discarding-if (complement (make-rg-p read-group)) bam)
+                   bam))
+          (title (if read-group
+                     (rg-description header read-group)
+                     "all read groups")))
       (multiple-value-bind (patterns read-count)
           (base-patterns bam (char-upcase pattern-char) #\.)
         (with-open-file (out report-filespec :direction :output
@@ -96,7 +104,7 @@ number of reads examined."
   (declare (type fixnum min-char-freq))
   (flet ((make-mask (len positions)
            (let ((mask (make-array len :element-type 'base-char
-                                  :initial-element mask-char)))
+                                   :initial-element mask-char)))
              (loop
                 for i in positions
                 do (setf (char mask i) char)
@@ -124,28 +132,10 @@ number of reads examined."
                           into summary
                           finally (return (values summary read-count)))))))
 
-(defun hamming-search (seq1 seq2 &key (start1 0) end1 (start2 0) end2
-                       (max-distance 1))
-  (declare (optimize (speed 3)))
-  (declare (type simple-base-string seq1 seq2))
-  (let ((end1 (or end1 (length seq1)))
-        (end2 (or end2 (length seq2))))
-    (declare (type vector-index start1 start2 end1 end2 max-distance))
-    (flet ((hamdist (s1 e1 s2 e2)
-             (declare (optimize (safety 0)))
-             (loop
-                for i from s1 below e1
-                for j from s2 below e2
-                when (char/= (char seq1 i) (char seq2 j))
-                count i)))
-    (let ((len1 (- end1 start1)) position distance)
-      (loop
-         for i of-type vector-index from start2 to (- end2 len1)
-         for j of-type vector-index = (+ i len1)
-         for d = (hamdist start1 end1 i j)
-         for found = (<= d max-distance)
-         do (when found
-              (setf position i
-                    distance d))
-         until found
-         finally (return (values position distance)))))))
+(defun rg-description (header read-group)
+  (let ((rg (find read-group (header-records (make-sam-header header) :rg)
+                  :key (lambda (record)
+                         (header-value record :id)) :test #'string=)))
+    (check-arguments rg (read-group) "this read-group is not present")
+    (format nil "read group ~a ~a~@[ (~a)~]" read-group
+            (header-value rg :sm) (header-value rg :pu))))

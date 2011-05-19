@@ -41,4 +41,5 @@
 
 (defun write-json-file (filespec object)
   (with-open-file (stream filespec :direction :output :if-exists :supersede)
-    (with-underscore-translation (json:encode-json object stream))))
+    (with-underscore-translation (json:encode-json object stream))
+    (terpri stream)))

@@ -66,91 +66,122 @@ POSITION and random bases elsewhere."
   "Returns the character encoding Phred quality Q."
   (code-char (+ q 33)))
 
-(defmacro with-fake-bam ((filespec basename &rest args) &body body)
-  "Evaluates BODY with FILESPEC bound to the file name of a newly
-created fake BAM file defined by ARGS. If no error occurs in BODY, the
-fake BAM file will be deleted automatically."
-  `(let ((,filespec (fake-bam-file (dxi:tmp-pathname
-                                    :basename ,basename
-                                    :tmpdir (merge-pathnames "data")
-                                    :type "bam")
-                                   ,@args)))
-     (prog1
-         (progn
-           ,@body)
-       (delete-file ,filespec))))       ; do not delete on error in body
+(defmacro with-tmp-test-file ((file &optional (basename "") type) &body body)
+  "Sets up a temporary pathname in ./data for testing. Deletes any
+file created, unless a test-condition is raised."
+  `(handler-bind ((test-condition #'leave-tmp-pathname))
+     (with-tmp-pathname (,file :tmpdir (merge-pathnames "data")
+                               :basename ,basename :type ,type)
+       ,@body)))
+
+(defun test-count (file expected &optional filter)
+  (with-bam (in () file)
+    (let* ((fin (if filter
+                    (discarding-if filter in)
+                    in))
+           (n (loop
+                 while (has-more-p fin)
+                 count (next fin))))
+      (ensure (= expected n)
+              :report "Expected ~d but found ~d"
+              :arguments (expected n)))))
 
 (addtest (readmill-tests) base-patterns/1
-  (with-fake-bam (bamfile "base-patterns"
-                          :num-refs 1 :ref-length 500 :read-length 10
-                          :seq-fn (lambda (length)
-                                    (ambiguous-positions length 5 7 9)))
-    (with-bam (in () bamfile)
-      (let ((expected '((".....N.N.N" . 10)))
-            (patterns (base-patterns in #\N #\.)))
-        (ensure (equalp expected patterns)
-                :report "Expected ~a but found ~a"
-                :arguments (expected patterns))))))
+  (with-tmp-test-file (bam-file "base-patterns-" "bam")
+    (let* ((rg "read_group_0")
+           (num-refs 1)
+           (ref-len 500)
+           (gen (alignment-generator
+                 0 rg :read-length 10 :insert-length 380 :step-size 10
+                 :end ref-len :seq-fn (lambda (length)
+                                        (ambiguous-positions length 5 7 9))))
+           (bam (generate-bam-file bam-file num-refs ref-len (list rg) gen)))
+      (with-bam (in () bam)
+        (let ((expected '((".....N.N.N" . 20)))
+              (patterns (base-patterns in #\N #\.)))
+          (ensure (equalp expected patterns)
+                  :report "Expected ~a but found ~a"
+                  :arguments (expected patterns)))))))
 
 (addtest (readmill-tests) quality-filter/1
-  (with-fake-bam (bamfile "quality-filter"
-                          :num-refs 1 :ref-length 500 :read-length 10
-                          :qual-fn (lambda (length)
-                                     (quality-ranges length 20 10 0 6)))
-    (let ((filter1 (readmill::make-quality-p 20 :start 0 :end 6))
-          (filter2 (make-quality-p 20 :start 6 :end 10)))
-      (with-bam (in () bamfile)         ; filter 10/10
-        (let* ((fin (discarding-if filter1 in))
-               (n (loop
-                     while (has-more-p fin)
-                     count (next fin))))
-          (ensure (zerop n)
-                  :report "Expected 0 but found ~d"
-                  :arguments (n))))
-      (with-bam (in () bamfile)         ; filter 0/10
-        (let* ((fin (discarding-if filter2 in))
-               (n (loop
-                     while (has-more-p fin)
-                     count (next fin))))
-          (ensure (= 10 n)
-                  :report "Expected 10 but found ~d"
-                  :arguments (n)))))))
+  (with-tmp-test-file (bam-file "quality-filter-" "bam")
+    (let* ((rg "read_group_0")
+           (num-refs 1)
+           (ref-len 500)
+           (gen (alignment-generator
+                 0 rg :read-length 10 :insert-length 380 :step-size 10
+                 :end ref-len :quality-fn (lambda (length)
+                                            (quality-ranges length 20 10 0 6))))
+           (bam (generate-bam-file bam-file num-refs ref-len (list rg) gen))
+           (filter1 (make-quality-p 20 :start 0 :end 6))
+           (filter2 (make-quality-p 20 :start 6 :end 10)))
+      (test-count bam 0 filter1)       ; filter 20/20
+      (test-count bam 20 filter2))))   ; filter 0/20
 
 (addtest (readmill-tests) read-group-filter/1
   (flet ((read-group (aln)
            (assocdr :rg (alignment-tag-values aln))))
-    (with-fake-bam (bamfile "read-group-filter"
-                            :num-refs 2 :ref-length 500 :read-length 10)
-      (let ((filter (make-rg-p "0")))
-        (with-bam (in () bamfile)
-          (let* ((fin (discarding-if filter in))
+    (with-tmp-test-file (bam-file "read-group-filter-" "bam")
+      (let* ((rg0 "read_group_0")
+             (rg1 "read_group_1")
+             (num-refs 2)
+             (ref-len 500)
+             (gen1 (alignment-generator
+                    0 rg0 :read-length 10 :insert-length 380 :step-size 10
+                    :end ref-len))
+             (gen2 (alignment-generator
+                    0 rg1 :read-length 10 :insert-length 380 :step-size 10
+                    :end ref-len))
+             (bam (generate-bam-file bam-file num-refs ref-len (list rg0 rg1)
+                                     gen1 gen2)))
+        (with-bam (in () bam)
+          (let* ((fin (discarding-if (complement (make-rg-p rg0)) in))
+                 (expected 20)
                  (n (loop
                        while (has-more-p fin)
-                       count (string= "0" (read-group (next fin))))))
-            (ensure (= 10 n)
-                    :report "Expected 10 but found ~d"
-                    :arguments (n))))))))
+                       count (string= rg0 (read-group (next fin))))))
+            (ensure (= expected n)
+                    :report "Expected ~d but found ~d"
+                    :arguments (expected n))))))))
 
 (addtest (readmill-tests) subseq-filter/1
-  (with-fake-bam (bamfile "subseq-filter"
-                          :num-refs 1 :ref-length 500 :read-length 10
-                          :seq-fn (lambda (length)
-                                    (common-subsequence length "NNNN")))
-    (let ((filter1 (make-subseq-p "NNNN" :start 0 :end 4))
-          (filter2 (make-subseq-p "NNNN" :start 4 :end 10)))
-      (with-bam (in () bamfile)
-        (let* ((fin (discarding-if filter1 in))
-               (n (loop
-                     while (has-more-p fin)
-                     count (next fin))))
-          (ensure (zerop n)
-                  :report "Expected 0 but found ~d"
-                  :arguments (n))))
-      (with-bam (in () bamfile)
-        (let* ((fin (discarding-if filter2 in))
-               (n (loop
-                     while (has-more-p fin)
-                     count (next fin))))
-          (ensure (= 10 n)
-                  :report "Expected 10 but found ~d"
-                  :arguments (n)))))))
+  (with-tmp-test-file (bam-file "subseq-filter-" "bam")
+    (let* ((rg "read_group_0")
+           (num-refs 1)
+           (ref-len 500)
+           (gen (alignment-generator
+                 0 rg :read-length 10 :insert-length 380 :step-size 10
+                 :end ref-len :seq-fn (lambda (length)
+                                        (common-subsequence length "NNNN"))))
+           (bam (generate-bam-file bam-file num-refs ref-len (list rg) gen))
+           (filter1 (make-subseq-p "NNNN" :start 0 :end 4))
+           (filter2 (make-subseq-p "NNNN" :start 4 :end 10)))
+      (test-count bam 0 filter1 )       ; filter 20/20
+      (test-count bam 20 filter2))))    ; filter 0/20
+
+(addtest (readmill-tests) orphan-filter/1
+  (with-tmp-test-file (sorted-file "name-sorted-")
+    (with-tmp-test-file (in-file "orphan-filter-in-")
+      ;; Make a BAM file containing orphans
+      (let* ((rg "read_group_0")
+             (num-refs 1)
+             (ref-len 500)
+             (gen (alignment-orphanizer
+                   (alignment-generator
+                    0 rg :read-length 10 :insert-length 380 :step-size 10
+                    :end ref-len)))
+             (in-file (generate-bam-file
+                       in-file num-refs ref-len (list rg) gen)))
+        (test-count in-file 15))        ; dropped alternate last frags
+      ;; Must be name sorted to detect orphans
+      (sort-bam-file in-file sorted-file :sort-order :queryname))
+    ;; Rewrite the BAM file without orphans
+    (with-tmp-test-file (out-file "orphan-filter-out-" "bam")
+      (with-bam (in (header num-refs ref-meta) sorted-file)
+        (with-bam (out (header num-refs ref-meta) out-file
+                       :direction :output :if-does-not-exist :create)
+          (let ((out (pair-consumer out)))
+            (loop
+               while (has-more-p in)
+               do (consume out (next in))))))
+      (test-count out-file 10)))) ; dropped alternate last frags and mates

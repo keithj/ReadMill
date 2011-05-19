@@ -20,7 +20,7 @@
 (in-package :uk.ac.sanger.readmill)
 
 (defvar *readmill-name* "ReadMill")
-(defvar *readmill-version* "0.0.4"
+(defvar *readmill-version* "0.0.6"
   "The version number of the ReadMill application.")
 
 (deftype quality-score ()

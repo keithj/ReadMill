@@ -20,7 +20,7 @@
 (in-package :uk.ac.sanger.readmill)
 
 (defun filter-bam (cmd input-file output-file filters descriptors
-                   &optional json-file)
+                   &key orphans json-file)
   (with-bam (in (header num-refs ref-meta) input-file)
     (let* ((hd (subst-sort-order (make-sam-header header) :unsorted))
            (pg (pg-record "readmill-filter"
@@ -34,7 +34,10 @@
                      output-file :direction :output
                      :if-does-not-exist :create :if-exists :supersede)
         (let* ((counters (mapcar #'make-counting-predicate filters))
-               (in (discarding-if (apply #'any counters) in)))
+               (in (discarding-if (apply #'any counters) in))
+               (out (if orphans
+                        out
+                        (pair-consumer out))))
           (loop
              while (has-more-p in)
              do (consume out (next in)))
@@ -49,7 +52,7 @@
 
 ;; Experimental multi-threaded version
 (defun pfilter-bam (cmd input-file output-file filters descriptors
-                    &optional json-file)
+                    &key json-file orphans)
   (with-bam (in (header num-refs ref-meta) input-file)
     (let* ((hd (make-sam-header header))
            (pg (pg-record "readmill-filter"
@@ -62,8 +65,11 @@
                          (add-pg-record hd pg) s)) num-refs ref-meta)
                      output-file :direction :output
                      :if-does-not-exist :create :if-exists :overwrite)
-        (let ((counts (batch-filter in out filters
-                                    :threads 2 :batch-size 10000)))
+        (let* ((out (if orphans
+                        out
+                        (pair-consumer out)))
+               (counts (batch-filter in out filters
+                                     :threads 2 :batch-size 10000)))
           (when json-file
             (write-json-file json-file
                              (mapcar (lambda (fn x)

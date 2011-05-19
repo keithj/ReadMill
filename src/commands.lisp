@@ -48,12 +48,14 @@
 
 (defun pattern-report (parsed-args &optional argv)
   (declare (ignore argv))
+  "Applies the base pattern report CLI to PARSED-ARGS."
   (apply #'write-pattern-report
          (mapcar (lambda (option)
                    (option-value option parsed-args))
                  '(report-file pattern-char min-freq input-file read-group))))
 
 (defun read-filter (parsed-args &optional argv)
+  "Applies the read filter CLI to PARSED-ARGS."
   (let* ((input-file (option-value 'input-file parsed-args))
          (output-file (option-value 'output-file parsed-args))
          (filter-args '(read-group min-quality queries))
@@ -65,8 +67,10 @@
                                  (mapcan (lambda (arg)
                                            (make-descriptors arg parsed-args))
                                          filter-args)))
+         (orphans (option-value 'orphans parsed-args))
          (json-file (option-value 'json-file parsed-args nil)))
-    (filter-bam argv input-file output-file filters descriptors json-file)))
+    (filter-bam argv input-file output-file filters descriptors
+               :orphans orphans  :json-file json-file)))
 
 (defgeneric make-filters (arg parsed-args)
   (:documentation "Returns a list of filter predicates appropriate to
@@ -76,7 +80,7 @@ CLI argument ARG. The list may be empty, or contain a single element.")
     nil)
   (:method ((arg (eql 'read-group)) args)
     (when (option-value 'read-group args nil)
-      (list (make-rg-p (option-value 'read-group args)))))
+      (list (complement (make-rg-p (option-value 'read-group args))))))
   (:method ((arg (eql 'min-quality)) args)
     (when (option-value 'min-quality args nil)
       (list (make-quality-p (option-value 'min-quality args)
@@ -100,8 +104,8 @@ CLI argument ARG. The list may be empty, or contain a single element.")
     (when (option-value 'read-group args nil)
       (let ((msg (format nil "not in read-group ~s"
                          (option-value 'read-group args))))
-        (list (lambda (m n)
-                (describe-filter-result m n "read-group" msg))))))
+        (list (lambda (calls true)
+                (describe-filter-result calls true "read-group" msg))))))
   (:method ((arg (eql 'min-quality)) args)
     (when (option-value 'min-quality args nil)
       (let* ((start (option-value 'start args 0))
@@ -109,8 +113,8 @@ CLI argument ARG. The list may be empty, or contain a single element.")
              (min-quality (option-value 'min-quality args))
              (msg (format nil "a base between ~d and ~a has quality below ~d"
                           start (or end "the read end") min-quality)))
-        (list (lambda (m n)
-                (describe-filter-result m n "quality-filter" msg))))))
+        (list (lambda (calls true)
+                (describe-filter-result calls true "quality-filter" msg))))))
   (:method ((arg (eql 'queries)) args)
     (when (option-value 'queries args nil)
       (let* ((start (option-value 'start args 0))
@@ -118,7 +122,7 @@ CLI argument ARG. The list may be empty, or contain a single element.")
              (fmt (format nil "sequence ~~s found between ~d and ~a"
                           start (or end "the read end"))))
         (mapcar (lambda (query)
-                  (lambda (m n)
-                    (describe-filter-result m n "subseq-filter"
+                  (lambda (calls true)
+                    (describe-filter-result calls true "subseq-filter"
                                             (format nil fmt query))))
                 (option-value 'queries args))))))

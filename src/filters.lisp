@@ -21,25 +21,25 @@
 
 (defun make-counting-predicate (predicate)
   "Returns a copy of PREDICATE that counts the number of alignments
-filtered and the number passed. PREDICATE should accept a BAM
-record. The returned function returns three values; the return value
-of PREDICATE, the number of times the function has been called with a
-BAM record argument and the number of times that it has returned T."
-  (let ((called 0)
-        (passed 0))
-    (declare (type fixnum called passed))
+filtered. PREDICATE should accept a BAM record. The returned function
+returns three values; the return value of PREDICATE, the number of
+times the function has been called with a BAM record argument and the
+number of times that it has returned T."
+  (let ((calls 0)
+        (true 0))
+    (declare (type fixnum calls true))
     (lambda (&optional x)
       (declare (optimize (speed 3) (safety 0)))
       (declare (type function predicate))
       (cond ((null x)
-             (values x called passed))
+             (values x calls true))
             ((funcall predicate x)
-             (incf called)
-             (values x called passed))
+             (incf calls)
+             (incf true)
+             (values x calls true))
             (t
-             (incf called)
-             (incf passed)
-             (values nil called passed))))))
+             (incf calls)
+             (values nil calls true))))))
 
 ;; Experimental version that uses a list of predicates that are
 ;; wrapped in in counters, which are in turn composed into one
@@ -50,7 +50,7 @@ any of functions PREDICATES do not return T, to consumer function
 OUT (i.e. acts like CL:DELETE-IF). Calls to PREDICATES may be run in
 batches under separate threads, each processing BATCH-SIZE records.
 The return value is a list of lists, each containing the counts of
-values tested and passed as the first and seconf elements,
+values tested and passed as the first and second elements,
 respectively."
   (declare (optimize (speed 3)))
   (declare (type fixnum threads batch-size))
@@ -93,11 +93,11 @@ respectively."
 alignments of READ-GROUP."
   (lambda (aln)
     (declare (optimize (speed 3)))
-    (declare (type (simple-array character (*)) read-group))
+    (declare (type simple-string read-group))
     (let ((tag (assocdr :rg (alignment-tag-values aln))))
       (when tag
         (locally (declare (type simple-base-string tag))
-          (string/= read-group tag))))))
+          (string= read-group tag))))))
 
 (defun make-polyx-p (char length &key (start 0) end)
   "Returns a homopolymer filtering predicate that returns T for BAM
@@ -144,18 +144,30 @@ and END."
                                  #'decode-phred-quality qual-str)
                        (remove-key-values '(:count) args))))))
 
-(defun maybe-filter-rg (in header &optional read-group)
-  (if read-group
-      (let ((rg (find read-group (header-records (make-sam-header header) :rg)
-                      :key (lambda (record)
-                             (header-value record :id))
-                      :test #'string=)))
-        (check-arguments rg (read-group) "this read-group is not present")
-        (values
-         (discarding-if (lambda (aln)
-                          (string/= read-group
-                                    (assocdr :rg (alignment-tag-values aln))))
-                        in)
-         (format nil "read group ~a ~a~@[ (~a)~]" read-group
-                 (header-value rg :sm) (header-value rg :pu))))
-      (values in "all read groups")))
+(defun pair-consumer (out)
+  "Given an alignment consumer function OUT, returns a new consumer
+function that only successfully consumes read pairs. i.e. consecutive
+first/last fragment alignments in the new template/fragment SAM
+notation. Orphan read alignments are dropped."
+  (let (aln1 name1)
+    (lambda (aln)
+      (cond ((and (null aln) (null aln1))
+             nil)
+            ((and (null aln) aln1)
+             (setf aln1 nil))
+            (t
+             (let ((flag (alignment-flag aln)))
+               (cond ((and (null aln1) (multiple-frags-p flag))
+                      (setf aln1 aln
+                            name1 (read-name aln)))
+                     ((string= name1 (read-name aln))
+                      (cond ((first-frag-p flag)
+                             (consume out aln)
+                             (consume out aln1))
+                            (t
+                             (consume out aln1)
+                             (consume out aln)))
+                      (setf aln1 nil))
+                     (t
+                      (setf aln1 aln
+                            name1 (read-name aln))))))))))
