@@ -118,7 +118,7 @@ alignment unclipped sequence string."
         (declare (type simple-base-string seq))
         (search str seq :start2 start :end2 end :test #'string=)))))
 
-(defun make-quality-p (quality-threshold &rest args
+(defun make-quality-p (quality-threshold
                        &key (start 0) end (test #'<=) (count 1))
   "Returns a quality matching predicate that returns T for BAM
 alignments having COUNT or more base qualities passing TEST relative
@@ -137,12 +137,12 @@ and END."
       (declare (type simple-base-string qual-str)
                (type quality-score quality-threshold)
                (type fixnum count))
-      (>= count (apply #'count quality-threshold
+      (>= count (count quality-threshold
                        (map-into (make-array (length qual-str)
                                              :element-type 'quality-score
                                              :initial-element 0)
                                  #'decode-phred-quality qual-str)
-                       (remove-key-values '(:count) args))))))
+                       :start start :end end :test test)))))
 
 (defun pair-consumer (out)
   "Given an alignment consumer function OUT, returns a new consumer

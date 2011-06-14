@@ -69,7 +69,7 @@ POSITION and random bases elsewhere."
 (defmacro with-tmp-test-file ((file &optional (basename "") type) &body body)
   "Sets up a temporary pathname in ./data for testing. Deletes any
 file created, unless a test-condition is raised."
-  `(handler-bind ((test-condition #'leave-tmp-pathname))
+  `(handler-bind ((test-condition #'delete-tmp-pathname))
      (with-tmp-pathname (,file :tmpdir (merge-pathnames "data")
                                :basename ,basename :type ,type)
        ,@body)))
@@ -185,3 +185,28 @@ file created, unless a test-condition is raised."
                while (has-more-p in)
                do (consume out (next in))))))
       (test-count out-file 10)))) ; dropped alternate last frags and mates
+
+(addtest (readmill-tests) split-bam/1
+  (with-tmp-test-file (in-file "split-in-" "bam")
+    (let* ((rg "read_group_0")
+           (num-refs 1)
+           (ref-len 500)
+           (gen (alignment-generator
+                 0 rg :read-length 10 :insert-length 380 :step-size 10
+                 :end ref-len))
+           (in-file (generate-bam-file
+                     in-file num-refs ref-len (list rg) gen)))
+      ;; File contains 20 reads
+      (with-tmp-test-file (out-name "split-out-")
+        (multiple-value-bind (parts sizes)
+            (split-bam-by-size (list "test") in-file out-name :max-size 9)
+          (let ((expected (mapcar (lambda (n)
+                                    (format nil "~a.part.~d.bam"
+                                            (file-namestring out-name) n))
+                                  '(0 1 2)))
+                (found (mapcar #'file-namestring parts)))
+          (ensure (equalp expected found)
+                  :report "Expected ~a but found ~a"
+                  :arguments (expected found))
+          (ensure (equal '(9 9 2) sizes))
+          (mapcar #'delete-file parts)))))))

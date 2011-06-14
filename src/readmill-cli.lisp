@@ -49,7 +49,7 @@ designating a CLI class."
     (terpri stream)
     (mapc (lambda (cmd)
             (let* ((cli (get-cli cmd))
-                   (doc (documentation (class-name (class-of cli)) 'type)))
+                   (doc (documentation-of cli)))
               (if doc
                   (help-message cli doc stream)
                   (warn "No help was found for ~a" cmd)))) commands)))
@@ -57,45 +57,43 @@ designating a CLI class."
 (defun readmill-cli ()
   "Applies the appropriate command line interface."
   (flet ((errmsg (c)
+           (princ "Error: " *error-output*)
            (write-line (string-capitalize (format nil "~a" c) :end 1)
-                       *error-output*)))
-    (with-cli (argv :quit t :error-status 1)
+                       *error-output*)
+           (terpri *error-output*)))
+    (with-argv (argv)
       (let* ((cmd (first argv))
              (args (rest argv))
              (cli (get-cli cmd)))
         (handler-case
-            (cond ((null cmd)
-                   (print-avail-commands))
-                  (cli
-                   (funcall (get-fn cmd) (parse-command-line cli args) argv))
-                  (t
-                   (error 'unknown-command :command cmd)))
+            (if (or (null cmd) (null cli))
+                (error 'unknown-command :cli cli :command cmd)
+                (funcall (get-fn cmd)
+                         (parse-command-line cli args) argv))
           (unknown-command (condition)
             (errmsg condition)
             (print-avail-commands)
             (quit-lisp :status 2))
-          (cli-error ()
+          (cli-error (condition)
+            (errmsg condition)
             (princ "Usage: " *error-output*)
-            (let ((msg (documentation (class-name (class-of cli)) 'type)))
+            (let ((msg (documentation-of cli)))
               (if msg
                   (help-message cli msg *error-output*)
                   (warn "No help was found for ~a~%" cmd)))
-            (quit-lisp :status 3))
-          (error (condition)
-            (errmsg condition)
-            (quit-lisp :status 4)))))))
+            (quit-lisp :status 3)))))))
 
 (define-cli verbosity-mixin ()
   ((verbose "verbose" :required-option nil :value-type t
             :documentation "Print summary of action to standard output.")))
 
-(define-cli input-file-mixin ()
-  ((input-file "input-file" :required-option t :value-type 'string
-               :documentation "The input file.")))
+(define-cli input-mixin ()
+  ((input "input" :required-option t :value-type 'string
+          :documentation "The input file or stream.")))
 
-(define-cli output-file-mixin ()
-  ((output-file "output-file" :required-option t :value-type 'string
-                :documentation "The output file.")))
+(define-cli output-mixin ()
+  ((output "output" :required-option t :value-type 'string
+           :documentation "The output file or stream.")))
 
 (define-cli json-log-mixin ()
   ((json-file "json-file" :required-option nil :value-type 'string
@@ -123,36 +121,45 @@ designating a CLI class."
             :documentation "Reports the software version."))
   (:documentation "about [--platform] [--version]"))
 
-(define-cli quality-plot-cli (cli read-group-mixin input-file-mixin)
+(define-cli quality-plot-cli (cli read-group-mixin input-mixin)
   ((plot-file "plot-file" :required-option t :value-type 'string
               :documentation "The plot file."))
-  (:documentation "quality-plot [--read-group <id>] --input-file <filename>
+  (:documentation "quality-plot --input <name> [--read-group <id>]
 --plot-file <filename>"))
 
-(define-cli pattern-report-cli (cli read-group-mixin input-file-mixin)
+(define-cli pattern-report-cli (cli read-group-mixin input-mixin)
   ((report-file "report-file" :required-option t :value-type 'string
                 :documentation "The plot file.")
    (pattern-char "pattern-char" :required-option t :value-type 'character
                  :documentation "The pattern character.")
    (min-freq "min-freq" :required-option t :value-type 'integer
              :documentation "The minimum pattern frequency to be reported."))
-  (:documentation "pattern-report [--read-group <id>] --input-file <filename>
+  (:documentation "pattern-report --input <name> [--read-group <id>]
 --report-file <filename> --pattern-char <character> --min-freq <frequency>"))
 
 (define-cli read-filter-cli (cli read-range-mixin
-                             input-file-mixin output-file-mixin json-log-mixin)
+                             input-mixin output-mixin json-log-mixin)
   ((min-quality "min-quality" :required-option nil :value-type 'integer
                 :documentation "The minimum quality threshold.")
    (queries "queries" :required-option nil :value-type 'string-list
             :documentation "Subsequences to search for.")
    (orphans "orphans" :required-option nil :value-type t
             :documentation "Include orphans in output."))
-  (:documentation "read-filter --input-file <filename>
---output-file <filename> [--read-start <integer>] [--read-end <integer>]
+  (:documentation "read-filter --input <name> --output <name>
+[--read-start <integer>] [--read-end <integer>]
 [--min-quality <integer>] [--queries <seq1,seq2 ... seqn>]
 [--orphans] [--json-log <filename>]"))
 
+(define-cli split-bam-cli (cli input-mixin output-mixin)
+  ((separator "separator" :required-option nil :value-type 'string
+              :documentation "The output filename separator string.")
+   (max-size "max-size" :required-option t :value-type 'integer
+             :documentation "The maximum number of reads per output file."))
+  (:documentation "split-bam --input <name> --output <name>
+--max-size <integer> [--separator <string>]"))
+
 (register-command "about" 'about-cli #'about)
-(register-command "quality-plot" 'quality-plot-cli #'quality-plot)
 (register-command "pattern-report" 'pattern-report-cli #'pattern-report)
+(register-command "quality-plot" 'quality-plot-cli #'quality-plot)
 (register-command "read-filter" 'read-filter-cli #'read-filter)
+(register-command "split-bam" 'split-bam-cli #'split-bam)

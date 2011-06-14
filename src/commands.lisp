@@ -44,7 +44,7 @@
   (declare (ignore argv))
   (apply #'write-quality-plot (mapcar (lambda (option)
                                         (option-value option parsed-args))
-                                      '(plot-file input-file read-group))))
+                                      '(plot-file input read-group))))
 
 (defun pattern-report (parsed-args &optional argv)
   (declare (ignore argv))
@@ -52,12 +52,12 @@
   (apply #'write-pattern-report
          (mapcar (lambda (option)
                    (option-value option parsed-args))
-                 '(report-file pattern-char min-freq input-file read-group))))
+                 '(report-file pattern-char min-freq input read-group))))
 
 (defun read-filter (parsed-args &optional argv)
   "Applies the read filter CLI to PARSED-ARGS."
-  (let* ((input-file (option-value 'input-file parsed-args))
-         (output-file (option-value 'output-file parsed-args))
+  (let* ((input (option-value 'input parsed-args))
+         (output (option-value 'output parsed-args))
          (filter-args '(read-group min-quality queries))
          (filters (remove-if #'null
                              (mapcan (lambda (arg)
@@ -69,8 +69,16 @@
                                          filter-args)))
          (orphans (option-value 'orphans parsed-args))
          (json-file (option-value 'json-file parsed-args nil)))
-    (filter-bam argv input-file output-file filters descriptors
-               :orphans orphans  :json-file json-file)))
+    (filter-bam argv input output filters descriptors
+                :orphans orphans :json-file json-file)))
+
+(defun split-bam (parsed-args &optional argv)
+  (let ((input (option-value 'input parsed-args))
+        (output (option-value 'output parsed-args))
+        (separator (option-value 'separator parsed-args))
+        (max-size (option-value 'max-size parsed-args)))
+    (split-bam-by-size argv input output :separator separator
+                       :max-size max-size)))
 
 (defgeneric make-filters (arg parsed-args)
   (:documentation "Returns a list of filter predicates appropriate to

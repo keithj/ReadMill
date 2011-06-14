@@ -32,4 +32,6 @@
    #:make-subseq-p
    #:base-patterns
 
-   #:pair-consumer))
+   #:pair-consumer
+
+   #:split-bam-by-size))

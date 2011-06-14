@@ -25,10 +25,11 @@
 
 (asdf:defsystem readmill
   :name "readmill"
-  :version "0.0.6"
+  :version "0.1.0"
   :author "Keith James"
   :licence "GPL v3"
   :depends-on (:deoxybyte-systems
+               (:version :deoxybyte-io "0.10.0")
                (:version :deoxybyte-run "0.4.6")
                (:version :cl-sam "0.12.1")
                (:version :eager-future "0.4.0")
@@ -42,8 +43,9 @@
                                      (:file "utilities")
                                      (:file "json")
                                      (:file "filters")
-                                     (:file "read-analysis")
+                                     (:file "read-processing")
                                      (:file "read-filtering")
+                                     (:file "read-analysis")
                                      (:file "commands")
                                      (:file "readmill-cli")))
                (:lift-test-config :lift-tests

@@ -19,19 +19,12 @@
 
 (in-package :uk.ac.sanger.readmill)
 
-(defun filter-bam (cmd input-file output-file filters descriptors
+(defun filter-bam (argv input output filters descriptors
                    &key orphans json-file)
-  (with-bam (in (header num-refs ref-meta) input-file)
-    (let* ((hd (subst-sort-order (make-sam-header header) :unsorted))
-           (pg (pg-record "readmill-filter"
-                          :program-name *readmill-name*
-                          :program-version *readmill-version*
-                          :previous-program (previous-program hd)
-                          :command-line (format nil "~{~a~^ ~}" cmd))))
-      (with-bam (out ((with-output-to-string (s)
-                        (write-sam-header
-                         (add-pg-record hd pg) s)) num-refs ref-meta)
-                     output-file :direction :output
+  (with-bam (in (header num-refs ref-meta) (maybe-standard-stream input))
+    (let ((hd (subst-sort-order (make-sam-header header) :unsorted)))
+      (with-bam (out ((header-string (add-header-pg hd argv)) num-refs ref-meta)
+                     (maybe-standard-stream output) :direction :output
                      :if-does-not-exist :create :if-exists :supersede)
         (let* ((counters (mapcar #'make-counting-predicate filters))
                (in (discarding-if (apply #'any counters) in))
@@ -51,19 +44,12 @@
             counts))))))
 
 ;; Experimental multi-threaded version
-(defun pfilter-bam (cmd input-file output-file filters descriptors
+(defun pfilter-bam (argv input output filters descriptors
                     &key json-file orphans)
-  (with-bam (in (header num-refs ref-meta) input-file)
-    (let* ((hd (make-sam-header header))
-           (pg (pg-record "readmill-filter"
-                          :program-name *readmill-name*
-                          :program-version *readmill-version*
-                          :previous-program (previous-program hd)
-                          :command-line (format nil "~{~a~^ ~}" cmd))))
-      (with-bam (out ((with-output-to-string (s)
-                        (write-sam-header
-                         (add-pg-record hd pg) s)) num-refs ref-meta)
-                     output-file :direction :output
+  (with-bam (in (header num-refs ref-meta) (maybe-standard-stream input))
+    (let ((hd (make-sam-header header)))
+      (with-bam (out ((header-string (add-header-pg hd argv)) num-refs ref-meta)
+                     (maybe-standard-stream output) :direction :output
                      :if-does-not-exist :create :if-exists :overwrite)
         (let* ((out (if orphans
                         out
