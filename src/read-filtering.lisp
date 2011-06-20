@@ -1,5 +1,5 @@
 ;;;
-;;; Copyright (C) 2010 Genome Research Ltd. All rights reserved.
+;;; Copyright (c) 2010-2011 Genome Research Ltd. All rights reserved.
 ;;;
 ;;; This file is part of readmill.
 ;;;
@@ -23,7 +23,8 @@
                    &key orphans json-file)
   (with-bam (in (header num-refs ref-meta) (maybe-standard-stream input))
     (let ((hd (subst-sort-order (make-sam-header header) :unsorted)))
-      (with-bam (out ((header-string (add-header-pg hd argv)) num-refs ref-meta)
+      (with-bam (out ((header-string (add-readmill-pg hd argv))num-refs
+                      ref-meta)
                      (maybe-standard-stream output) :direction :output
                      :if-does-not-exist :create :if-exists :supersede)
         (let* ((counters (mapcar #'make-counting-predicate filters))
@@ -48,9 +49,10 @@
                     &key json-file orphans)
   (with-bam (in (header num-refs ref-meta) (maybe-standard-stream input))
     (let ((hd (make-sam-header header)))
-      (with-bam (out ((header-string (add-header-pg hd argv)) num-refs ref-meta)
+      (with-bam (out ((header-string (add-readmill-pg hd argv)) num-refs
+                      ref-meta)
                      (maybe-standard-stream output) :direction :output
-                     :if-does-not-exist :create :if-exists :overwrite)
+                     :if-does-not-exist :create :if-exists :supersede)
         (let* ((out (if orphans
                         out
                         (pair-consumer out)))
