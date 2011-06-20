@@ -1,5 +1,5 @@
 ;;;
-;;; Copyright (C) 2010 Genome Research Ltd. All rights reserved.
+;;; Copyright (c) 2010-2011 Genome Research Ltd. All rights reserved.
 ;;;
 ;;; This file is part of readmill.
 ;;;
@@ -24,6 +24,7 @@
   "The version number of the ReadMill application.")
 
 (deftype quality-score ()
+  "Phred quality score."
   '(integer 0 100))
 
 (defun maybe-standard-stream (name)
@@ -101,7 +102,7 @@ tree, returns NIL."
     (when (endp (rest pp))
       (first pp))))
 
-(defun add-header-pg (header argv)
+(defun add-readmill-pg (header argv)
   "Adds a PG record to BAM list HEADER based on ReadMill invocation ARGV."
   (let ((pg (pg-record "readmill-chunk"
                        :program-name *readmill-name*

@@ -1,5 +1,5 @@
 ;;;
-;;; Copyright (C) 2010 Genome Research Ltd. All rights reserved.
+;;; Copyright (c) 2010-2011 Genome Research Ltd. All rights reserved.
 ;;;
 ;;; This file is part of readmill.
 ;;;
@@ -28,15 +28,14 @@ staring from 0. Returns two values; a list of names of the new files
 and a list of the numbers of reads in each."
    (check-arguments (and (integerp max-size) (plusp max-size)) (max-size)
                     "expected a positive integer")
-  (let ((file-namer (dxi:pathname-extender (pathname output-name)
-                                           :separator separator :type "bam")))
+  (let ((file-namer (pathname-extender (pathname output-name)
+                                       :separator separator :type "bam")))
     (with-bam (in (header num-refs ref-meta) input)
-      (let ((hd (add-header-pg (make-sam-header header) argv)))
+      (let ((hd (add-readmill-pg (make-sam-header header) argv)))
         (loop
            for part = (funcall file-namer)
            for n = (write-n-reads in max-size part
-                                  (header-string hd)
-                                  num-refs ref-meta)
+                                  (header-string hd) num-refs ref-meta)
            until (zerop n)
            collect part into parts
            collect n into counts
@@ -45,12 +44,13 @@ and a list of the numbers of reads in each."
 (defun write-n-reads (in n pathname header num-refs ref-meta)
   "Writes up to N reads taken from generator in to a new BAM file at
 PATHNAME, having BAM metadata HEADER, NUM-REFS and REF-META."
+  (declare (optimize (speed 3)))
   (if (not (has-more-p in))
       0
       (with-bam (out (header num-refs ref-meta) pathname :direction :output
                      :if-exists :supersede :if-does-not-exist :create)
         (loop
-           for count from 0 below n
+           for count of-type fixnum from 0 below n
            while (has-more-p in)
            do (consume out (next in))
            finally (return count)))))
