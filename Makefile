@@ -19,4 +19,4 @@
 .PHONY:	all
 
 all:
-	sbcl --dynamic-space-size 512 --no-userinit --disable-debugger --load build.lisp
+	sbcl --dynamic-space-size 1024 --no-userinit --disable-debugger --load build.lisp
