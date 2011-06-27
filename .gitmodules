@@ -1,0 +1,15 @@
+[submodule "lib/deoxybyte-bundle"]
+	path = lib/deoxybyte-bundle
+	url = https://github.com/keithj/deoxybyte-bundle.git
+[submodule "lib/cl-json"]
+	path = lib/cl-json
+	url = https://github.com/keithj/cl-json.git
+[submodule "lib/eager-future"]
+	path = lib/eager-future
+	url = https://github.com/vsedach/Eager-Future.git
+[submodule "lib/cl-sam"]
+	path = lib/cl-sam
+	url = https://github.com/keithj/cl-sam.git
+[submodule "lib/bordeaux-threads"]
+	path = lib/bordeaux-threads
+	url = https://git.gitorious.org/bordeaux-threads/bordeaux-threads.git

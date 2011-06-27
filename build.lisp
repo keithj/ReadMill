@@ -1,5 +1,5 @@
 ;;;
-;;; Copyright (C) 2010 Genome Research Ltd. All rights reserved.
+;;; Copyright (c) 2010-2011 Genome Research Ltd. All rights reserved.
 ;;;
 ;;; This file is part of readmill.
 ;;;
@@ -23,22 +23,36 @@
 (require 'asdf)
 
 ;; ;; Ignore any installed libraries; this build should be self-contained
-;; (asdf:clear-configuration)
+(asdf:clear-configuration)
 
-;; ;; Set the source registry to look in the lib directory only
-;; (asdf:initialize-source-registry
-;;  (mapcar (lambda (x)
-;;            (if (pathnamep x)
-;;                (list :directory x)
-;;                x))
-;;          (concatenate 'list (list :source-registry (merge-pathnames ""))
-;;                       (directory (merge-pathnames "lib/*"))
-;;                       (list :inherit-configuration))))
+;; Set the source registry to look in the lib directory only
+(asdf:initialize-source-registry
+ `(:source-registry
+   ,@(mapcar (lambda (path)
+               (list :directory (merge-pathnames path)))
+             '("lib/deoxybyte-bundle/alexandria/"
+               "lib/deoxybyte-bundle/babel/"
+               "lib/deoxybyte-bundle/cffi/"
+               "lib/deoxybyte-bundle/cl-fad-0.6.4/"
+               "lib/deoxybyte-bundle/deoxybyte-gzip/"
+               "lib/deoxybyte-bundle/deoxybyte-io/"
+               "lib/deoxybyte-bundle/deoxybyte-run/"
+               "lib/deoxybyte-bundle/deoxybyte-systems/"
+               "lib/deoxybyte-bundle/deoxybyte-unix/"
+               "lib/deoxybyte-bundle/deoxybyte-utilities/"
+               "lib/deoxybyte-bundle/getopt/"
+               "lib/deoxybyte-bundle/trivial-features/"
+               "lib/bordeaux-threads/"
+               "lib/cl-json/"
+               "lib/cl-sam/"
+               "lib/eager-future/"
+               "."))
+   :ignore-inherited-configuration))
 
-;; ;; Set the output translation to put fasl files in the build directory
-;; (asdf:initialize-output-translations
-;;  (list :output-translations (list t (merge-pathnames "build/**/*.*"))
-;;        :inherit-configuration))
+;; Set the output translation to put fasl files in the build directory
+(asdf:initialize-output-translations
+ (list :output-translations (list t (merge-pathnames "build/**/*.*"))
+       :ignore-inherited-configuration))
 
 (asdf:load-system :deoxybyte-systems)
 (asdf:load-system :readmill)
