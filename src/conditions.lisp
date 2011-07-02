@@ -32,3 +32,11 @@
              (format stream "ReadMill warning~@[: ~a~]"
                      (message-of condition))))
   (:documentation "An warning that is raised when using ReadMill."))
+
+(define-condition readmill-argument-error (readmill-error
+                                           invalid-argument-error)
+  ()
+  (:documentation (txt "An error that is raised when ReadMill receives invalid"
+                       "arguments from the user. This is appropriate when the"
+                       "CLI has been parsed correctly, but a non-syntactic"
+                       "has occurred subsequently.")))

@@ -27,9 +27,39 @@
   "Phred quality score."
   '(integer 0 100))
 
+(defmacro check-readmill-arguments (test-form arguments &optional error-message
+                                    &rest message-arguments)
+  "Checks the validity of ARGUMENTS. If TEST-FORM returns false an
+{define-condition invalid-argument-error} is raised. The default error
+message may be refined with an additional ERROR-MESSAGE.
+
+Arguments:
+
+- test-form (form): A form to be evaluated. If the form returns NIL,
+  an error is raised.
+- arguments (list symbols): A list of symbols to which argument values
+  are bound.
+
+Optional:
+
+- error-message (string): An error message string.
+
+Rest:
+
+- message-arguments (forms): Forms that evaluate to arguments for the
+  error message."
+  `(progn
+     (unless ,test-form
+       (error 'readmill-argument-error
+              :parameters ',arguments
+              :arguments (list ,@arguments)
+              :format-control ,error-message
+              :format-arguments (list ,@message-arguments)))
+     t))
+
 (defun maybe-standard-stream (name)
-  "Returns a standard stream if NAME is one of \"stdin\" or \"stdout\",
-otherwise returns NAME."
+  "Returns a standard stream if NAME is STRING-EQUAL to one of
+\"stdin\" or \"stdout\", otherwise returns NAME."
   (cond ((string-equal "stdin" name)
          *standard-input*)
         ((string-equal "stdout" name)

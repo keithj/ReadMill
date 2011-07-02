@@ -1,5 +1,5 @@
 ;;;
-;;; Copyright (C) 2010 Genome Research Ltd. All rights reserved.
+;;; Copyright (c) 2010-2011 Genome Research Ltd. All rights reserved.
 ;;;
 ;;; This file is part of readmill.
 ;;;
@@ -25,7 +25,7 @@
 
 (asdf:defsystem readmill
   :name "readmill"
-  :version "0.1.0"
+  :version "0.2.0"
   :author "Keith James"
   :licence "GPL v3"
   :depends-on (:deoxybyte-systems

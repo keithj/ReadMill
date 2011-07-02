@@ -40,25 +40,36 @@
            (platform-info)))))
 
 (defun quality-plot (parsed-args &optional argv)
-  "Applies the mean base quality plot CLI to PARSED-ARGS."
+  "Plots the mean quality of bases at each position in the reads."
   (declare (ignore argv))
-  (apply #'write-quality-plot (mapcar (lambda (option)
-                                        (option-value option parsed-args))
-                                      '(plot-file input read-group))))
+  (destructuring-bind (plot input read-group regions)
+      (mapcar (lambda (option)
+                (option-value option parsed-args))
+              '(plot input read-group regions))
+    (write-quality-plot plot input
+                        :index (when regions
+                                 (find-and-read-bam-index parsed-args))
+                        :regions (mapcar #'parse-region-string regions)
+                        :read-group read-group)))
 
 (defun pattern-report (parsed-args &optional argv)
   (declare (ignore argv))
-  "Applies the base pattern report CLI to PARSED-ARGS."
-  (apply #'write-pattern-report
-         (mapcar (lambda (option)
-                   (option-value option parsed-args))
-                 '(report-file pattern-char min-freq input read-group))))
+  "Reports the frequency of repeated patterns of specified bases."
+  (destructuring-bind (report char min-freq input regions read-group)
+      (mapcar (lambda (option)
+                (option-value option parsed-args))
+              '(report char min-freq input regions read-group))
+    (write-pattern-report report char min-freq input
+                          :index (when regions
+                                   (find-and-read-bam-index parsed-args))
+                          :regions (mapcar #'parse-region-string regions)
+                          :read-group read-group)))
 
 (defun read-filter (parsed-args &optional argv)
-  "Applies the read filter CLI to PARSED-ARGS."
+  "Filters BAM data, removing reads that match any of the filters."
   (let* ((input (option-value 'input parsed-args))
          (output (option-value 'output parsed-args))
-         (filter-args '(read-group min-quality queries))
+         (filter-args '(read-group queries))
          (filters (remove-if #'null
                              (mapcan (lambda (arg)
                                        (make-filters arg parsed-args))
@@ -73,12 +84,26 @@
                 :orphans orphans :json-file json-file)))
 
 (defun split-bam (parsed-args &optional argv)
+  "Splits BAM data into files that contain no more than a specified
+maximum number of reads."
   (let ((input (option-value 'input parsed-args))
         (output (option-value 'output parsed-args))
         (separator (option-value 'separator parsed-args))
         (max-size (option-value 'max-size parsed-args)))
     (split-bam-by-size argv input output :separator separator
                        :max-size max-size)))
+
+(defun find-and-read-bam-index (parsed-args)
+  (let ((input (option-value 'input parsed-args))
+        (index-file (option-value 'index parsed-args)))
+    (check-readmill-arguments
+     (not (streamp (maybe-standard-stream input))) (input)
+     "a BAM index may not be used with ~a" input)
+    (let ((index-file (or index-file (find-bam-index input))))
+      (check-readmill-arguments
+       index-file (input) "failed to infer a BAM index file for ~a" input)
+      (with-open-file (stream index-file :element-type 'octet)
+        (read-bam-index stream)))))
 
 (defgeneric make-filters (arg parsed-args)
   (:documentation "Returns a list of filter predicates appropriate to

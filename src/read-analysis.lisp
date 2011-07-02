@@ -19,11 +19,30 @@
 
 (in-package :uk.ac.sanger.readmill)
 
-(defun write-quality-plot (plot-filespec bam-filespec &optional read-group)
+(defun write-quality-plot (plot-filespec bam-filespec
+                           &key read-group regions index)
   "Writes a mean base quality plot for BAM file BAM-FILESPEC to PLOT-FILESPEC.
-Will accept reads of mixed length without warning. If READ-GROUP is
-provided, restricts plotting to those reads only."
-  (with-bam (bam (header) bam-filespec)
+Will accept reads of mixed length without warning.
+
+Arguments:
+
+- plot-filespec (pathname designator): The file to which the plot
+  will be written. If the file exists, it will be overwritten.
+- bam-filespec (pathname designator): The BAM file to be analysed.
+
+Key:
+
+- read-group (string designator): A read group ID to restrict analysis.
+- regions (list of region designators): A list of designators for regions
+  on reference sequences.
+- index (pathname designator): A BAM index, required when regions are
+  supplied.
+
+Returns:
+
+- plot-filespec."
+  (with-bam (bam (header) (maybe-standard-stream bam-filespec) :regions regions
+                 :index index)
     (let ((bam (if read-group
                    (discarding-if (complement (make-rg-p read-group)) bam)
                    bam))
@@ -50,7 +69,7 @@ provided, restricts plotting to those reads only."
   plot-filespec)
 
 (defun write-pattern-report (report-filespec pattern-char min-freq
-                             bam-filespec &optional read-group)
+                             bam-filespec &key read-group regions index)
   "Writes a text report describing commonly found patterns of
 PATTERN-CHAR in the reads of BAM file denoted by
 BAM-FILESPEC. Patterns found MIN-FREQ or more times will be reported.
@@ -65,14 +84,19 @@ Arguments:
 - min-freq (fixnum): The minimum pattern frequency to be reported.
 - bam-filespec (pathname designator): The BAM file to be analysed.
 
-Optional:
+Key:
 
 - read-group (string designator): A read group ID to restrict analysis.
+- regions (list of region designators): A list of designators for regions
+  on reference sequences.
+- index (pathname designator): A BAM index, required when regions are
+  supplied.
 
 Returns:
 
 - report-filespec."
-  (with-bam (bam (header) bam-filespec)
+  (with-bam (bam (header) (maybe-standard-stream bam-filespec) :regions regions
+                 :index index)
     (let ((bam (if read-group
                    (discarding-if (complement (make-rg-p read-group)) bam)
                    bam))
@@ -81,17 +105,22 @@ Returns:
                      "all read groups")))
       (multiple-value-bind (patterns read-count)
           (base-patterns bam (char-upcase pattern-char) #\.)
-        (with-open-file (out report-filespec :direction :output
-                             :if-exists :supersede)
-          (format out "Report for ~a~%" title)
-          (format out "Total no. reads: ~a~%" read-count)
-          (format out (txt "~%Most frequent patterns (occurring"
-                           "~a or more times):~%") min-freq)
-          (format out "~12@a Pattern~%" "Frequency")
-          (dolist (pat (sort patterns #'> :key #'cdr))
-            (when (<= min-freq (cdr pat))
-              (format out "~12d ~a~%" (cdr pat) (car pat))))))))
-  report-filespec)
+        (flet ((report (stream)
+                 (format stream "Report for ~a~%" title)
+                 (format stream "Total no. reads: ~a~%" read-count)
+                 (format stream (txt "~%Most frequent patterns (occurring"
+                                  "~a or more times):~%") min-freq)
+                 (format stream "~12@a Pattern~%" "Frequency")
+                 (dolist (pat (sort patterns #'> :key #'cdr))
+                   (when (<= min-freq (cdr pat))
+                     (format stream "~12d ~a~%" (cdr pat) (car pat))))))
+          (let ((out (maybe-standard-stream report-filespec)))
+            (if (streamp out)
+                (report out)
+                (with-open-file (stream out :direction :output
+                                        :if-exists :supersede)
+                  (report out)))
+            out))))))
 
 (defun base-patterns (bam char mask-char &optional (min-char-freq 0))
   "Returns an alist mapping strings to integers describing the most

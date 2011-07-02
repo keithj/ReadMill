@@ -26,8 +26,9 @@ up to MAX-SIZE reads. The output files are named
 <OUTPUT-NAME><SEPARATOR><integer>.bam with sequential numbering,
 staring from 0. Returns two values; a list of names of the new files
 and a list of the numbers of reads in each."
-   (check-arguments (and (integerp max-size) (plusp max-size)) (max-size)
-                    "expected a positive integer")
+  (check-arguments (stringp separator) (separator) "expected a string")
+  (check-arguments (and (integerp max-size) (plusp max-size)) (max-size)
+                   "expected a positive integer")
   (let ((file-namer (pathname-extender (pathname output-name)
                                        :separator separator :type "bam")))
     (with-bam (in (header num-refs ref-meta) input)
@@ -54,3 +55,26 @@ PATHNAME, having BAM metadata HEADER, NUM-REFS and REF-META."
            while (has-more-p in)
            do (consume out (next in))
            finally (return count)))))
+
+(defun quality-trim-position (aln quality-threshold &key (start 0) end)
+  "Calculates the position at which a read should be trimmed using
+BWA's 3-prime trimming algorithm, which maximises the sum of
+differences between QUALITY-THRESHOLD and each base quality, starting
+from END and proceeding to START. Returns two values, the position
+after the most 3-prime base to retain and the maximized sum of
+differences."
+  (let* ((len (read-length aln))
+         (end (or end (1- len)))
+         (qualities (map-into (make-array len
+                                          :element-type 'quality-score
+                                          :initial-element 0)
+                              #'decode-phred-quality (quality-string aln))))
+    (do ((i end (1- i))
+         (j end)
+         (score 0)
+         (max-score 0))
+        ((or (< i start) (minusp score)) (values (1+ j) max-score))
+      (incf score (- quality-threshold (aref qualities i)))
+      (when (> score max-score)
+        (setf max-score score
+              j i)))))

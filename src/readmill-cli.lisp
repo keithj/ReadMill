@@ -57,7 +57,6 @@ designating a CLI class."
 (defun readmill-cli ()
   "Applies the appropriate command line interface."
   (flet ((errmsg (c)
-           (princ "Error: " *error-output*)
            (write-line (string-capitalize (format nil "~a" c) :end 1)
                        *error-output*)
            (terpri *error-output*)))
@@ -81,7 +80,15 @@ designating a CLI class."
               (if msg
                   (help-message cli msg *error-output*)
                   (warn "No help was found for ~a~%" cmd)))
-            (quit-lisp :status 3)))))))
+            (quit-lisp :status 3))
+          (file-error (condition)
+            (errmsg condition))
+          (readmill-error (condition)
+             (errmsg condition))
+          (error (condition)
+            (errmsg condition)
+            (write-line "Backtrace follows:" *error-output*)
+            (error condition)))))))
 
 (define-cli verbosity-mixin ()
   ((verbose "verbose" :required-option nil :value-type t
@@ -109,10 +116,15 @@ designating a CLI class."
 
 (define-cli read-range-mixin ()
   ((read-start "read-start" :required-option nil :value-type 'integer
-               :documentation "The zero-based start position in the read.")
+               :documentation "A zero-based start position.")
    (read-end "read-end" :required-option nil :value-type 'integer
-             :documentation #.(txt "The zero-based, half-open end position"
-                                   "in the read."))))
+             :documentation  "A zero-based, half-open end position.")))
+
+(define-cli reference-regions-mixin ()
+  ((regions "regions" :required-option nil :value-type 'string-list
+            :documentation "One or more region designator strings.")
+   (index "index" :required-option nil :value-type 'string
+          :documentation "A BAM index file name.")))
 
 (define-cli about-cli (cli)
   ((platform "platform" :required-option nil :value-type t
@@ -124,31 +136,20 @@ designating a CLI class."
 (define-cli quality-plot-cli (cli read-group-mixin input-mixin)
   ((plot-file "plot-file" :required-option t :value-type 'string
               :documentation "The plot file."))
-  (:documentation "quality-plot --input <name> [--read-group <id>]
---plot-file <filename>"))
+  (:documentation "quality-plot --input <name> --plot <filename>
+[--read-group <id>] [--regions <string list>] [--index <bam index filename>]"))
 
-(define-cli pattern-report-cli (cli read-group-mixin input-mixin)
-  ((report-file "report-file" :required-option t :value-type 'string
-                :documentation "The plot file.")
-   (pattern-char "pattern-char" :required-option t :value-type 'character
-                 :documentation "The pattern character.")
+(define-cli pattern-report-cli (cli read-group-mixin input-mixin
+                                    reference-regions-mixin)
+  ((report "report" :required-option t :value-type 'string
+           :documentation "The plot file.")
+   (char "char" :required-option t :value-type 'character
+         :documentation "The pattern character.")
    (min-freq "min-freq" :required-option t :value-type 'integer
              :documentation "The minimum pattern frequency to be reported."))
-  (:documentation "pattern-report --input <name> [--read-group <id>]
---report-file <filename> --pattern-char <character> --min-freq <frequency>"))
-
-(define-cli read-filter-cli (cli read-range-mixin
-                             input-mixin output-mixin json-log-mixin)
-  ((min-quality "min-quality" :required-option nil :value-type 'integer
-                :documentation "The minimum quality threshold.")
-   (queries "queries" :required-option nil :value-type 'string-list
-            :documentation "Subsequences to search for.")
-   (orphans "orphans" :required-option nil :value-type t
-            :documentation "Include orphans in output."))
-  (:documentation "read-filter --input <name> --output <name>
-[--read-start <integer>] [--read-end <integer>]
-[--min-quality <integer>] [--queries <seq1,seq2 ... seqn>]
-[--orphans] [--json-log <filename>]"))
+  (:documentation "pattern-report --input <name> --char <character>
+--min-freq <frequency> --report <filename> [--read-group <id>]
+[--regions <string list>] [--index <bam index filename>]"))
 
 (define-cli split-bam-cli (cli input-mixin output-mixin)
   ((separator "separator" :required-option nil :value-type 'string
@@ -158,8 +159,18 @@ designating a CLI class."
   (:documentation "split-bam --input <name> --output <name>
 --max-size <integer> [--separator <string>]"))
 
+(define-cli read-filter-cli (cli read-range-mixin
+                             input-mixin output-mixin json-log-mixin)
+  ((queries "queries" :required-option nil :value-type 'string-list
+            :documentation "Subsequences to search for.")
+   (orphans "orphans" :required-option nil :value-type t
+            :documentation "Include orphans in output."))
+  (:documentation "read-filter --input <name> --output <name>
+[--read-start <integer>] [--read-end <integer>] [--queries <seq1,seq2 ... seqn>]
+[--orphans] [--json-log <filename>]"))
+
 (register-command "about" 'about-cli #'about)
 (register-command "pattern-report" 'pattern-report-cli #'pattern-report)
 (register-command "quality-plot" 'quality-plot-cli #'quality-plot)
-(register-command "read-filter" 'read-filter-cli #'read-filter)
 (register-command "split-bam" 'split-bam-cli #'split-bam)
+(register-command "read-filter" 'read-filter-cli #'read-filter)
