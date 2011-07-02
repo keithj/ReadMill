@@ -1,5 +1,4 @@
-
-# Copyright (C) 2010 Genome Research Ltd. All rights reserved.
+# Copyright (c) 2010-2011 Genome Research Ltd. All rights reserved.
 #
 # This file is part of readmill.
 #
@@ -16,7 +15,10 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-.PHONY:	all
+.PHONY:	all clean
 
 all:
 	sbcl --dynamic-space-size 1024 --no-userinit --disable-debugger --load build.lisp
+
+clean:
+	rm -r build/*
