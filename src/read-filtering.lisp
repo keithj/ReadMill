@@ -22,7 +22,7 @@
 (defun filter-bam (argv input output filters descriptors
                    &key orphans json-file)
   (with-bam (in (header num-refs ref-meta) (maybe-standard-stream input))
-    (let ((hd (subst-sort-order (make-sam-header header) :unsorted)))
+    (let ((hd (make-sam-header header)))
       (with-bam (out ((header-string (add-readmill-pg hd argv))num-refs
                       ref-meta)
                      (maybe-standard-stream output) :direction :output
