@@ -12,4 +12,4 @@
 	url = https://github.com/keithj/cl-sam.git
 [submodule "lib/bordeaux-threads"]
 	path = lib/bordeaux-threads
-	url = https://git.gitorious.org/bordeaux-threads/bordeaux-threads.git
+	url = https://gitorious.org/bordeaux-threads/bordeaux-threads.git
