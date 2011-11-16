@@ -15,10 +15,13 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-.PHONY:	all clean
+.PHONY:	all libs clean
 
-all:
+all: libs
 	sbcl --dynamic-space-size 1024 --no-userinit --disable-debugger --load build.lisp
+
+libs:
+	git submodule update --init --recursive
 
 clean:
 	rm -r build/*
